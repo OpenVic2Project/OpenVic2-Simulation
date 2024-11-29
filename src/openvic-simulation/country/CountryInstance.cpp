@@ -41,6 +41,7 @@ CountryInstance::CountryInstance(
 	country_definition { new_country_definition },
 	colour { ERROR_COLOUR },
 	capital { nullptr },
+	ai { true },
 	releasable_vassal { true },
 	owns_colonial_province { false },
 	country_status { COUNTRY_STATUS_UNCIVILISED },
