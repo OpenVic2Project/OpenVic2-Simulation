@@ -60,7 +60,8 @@ ModifierEffectCache::strata_effects_t::strata_effects_t()
 	vote { nullptr },
 	life_needs { nullptr },
 	everyday_needs { nullptr },
-	luxury_needs { nullptr } {}
+	luxury_needs { nullptr },
+	savings { nullptr } {}
 
 ModifierEffectCache::ModifierEffectCache()
   : /* Tech/inventions only */
@@ -81,6 +82,7 @@ ModifierEffectCache::ModifierEffectCache()
 	artisan_input { nullptr },
 	artisan_output { nullptr },
 	artisan_throughput { nullptr },
+	assimilation_rate_g { nullptr },
 	badboy { nullptr },
 	cb_generation_speed_modifier { nullptr },
 	civilization_progress_modifier { nullptr },
@@ -113,7 +115,8 @@ ModifierEffectCache::ModifierEffectCache()
 	influence_modifier { nullptr },
 	issue_change_speed { nullptr },
 	land_attack_modifier { nullptr },
-	land_attrition { nullptr },
+	land_attrition_tech { nullptr },
+	land_attrition_country { nullptr },
 	land_defense_modifier { nullptr },
 	land_organisation { nullptr },
 	land_unit_start_experience { nullptr },
@@ -171,6 +174,7 @@ ModifierEffectCache::ModifierEffectCache()
 	unciv_economic_modifier { nullptr },
 	unciv_military_modifier { nullptr },
 	unit_recruitment_time { nullptr },
+	unit_start_experience { nullptr },
 	war_exhaustion { nullptr },
 
 	/* Province Modifier Effects */

@@ -5,7 +5,7 @@
 
 #include "openvic-simulation/types/HasIdentifier.hpp"
 #include "openvic-simulation/types/IdentifierRegistry.hpp"
-#include "dataloader/NodeTools.hpp"
+#include "openvic-simulation/dataloader/NodeTools.hpp"
 
 namespace OpenVic {
 
