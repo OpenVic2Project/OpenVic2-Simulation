@@ -848,7 +848,6 @@ bool CountryInstance::apply_history_to_country(CountryHistoryEntry const& entry,
 			invention.get_chance().execute(instance_manager, this, this) > 0
 		) {
 			ret &= unlock_invention(invention);
-			// Logger::info("Unlocked invention ", invention.get_identifier(), " for country ", get_identifier());
 		}
 	}
 

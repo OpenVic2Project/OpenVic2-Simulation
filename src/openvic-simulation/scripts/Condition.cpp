@@ -1286,23 +1286,18 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 	ret &= add_condition(
 		"any_neighbor_country",
 		_parse_condition_node_list_callback<COUNTRY, COUNTRY>,
-		_execute_condition_node_unimplemented
-		/*_execute_condition_node_convert_scope<CountryInstance, scope_t, scope_t, argument_t const&>(
+		_execute_condition_node_convert_scope<CountryInstance, scope_t, scope_t, argument_t const&>(
 			_execute_condition_node_list_multi_scope_callback<
-				expect_true, require_any, std::vector<scope_t>, CountryInstance const*
+				expect_true, require_any, ordered_set<CountryInstance*> const&, CountryInstance const*
 			>(
 				[](
 					Condition const& condition, InstanceManager const& instance_manager, CountryInstance const* current_scope,
 					scope_t this_scope, scope_t from_scope
-				) -> std::vector<scope_t> {
-					std::vector<scope_t> neighbouring_country_scopes;
-
-					// TODO - fill neighbouring_country_scopes with pointers to countries neighbouring *current_scope
-
-					return neighbouring_country_scopes;
+				) -> ordered_set<CountryInstance*> const& {
+					return current_scope->get_neighbouring_countries();
 				}
 			)
-		)*/
+		)
 	);
 	ret &= add_condition(
 		"any_owned_province",
@@ -2185,6 +2180,7 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 		"industrial_score",
 		// This doesn't seem to work with regular country identifiers, they're treated as 0
 		_parse_condition_node_value_callback<fixed_point_t, COUNTRY | THIS | FROM>,
+		// TODO - THIS | FROM cases (could use _execute_condition_node_value_or_this_or_from_callback ???)
 		_execute_condition_node_cast_argument_callback<fixed_point_t, scope_t, scope_t, scope_t>(
 			_execute_condition_node_convert_scope<CountryInstance, scope_t, scope_t, fixed_point_t>(
 				[](
@@ -2316,7 +2312,14 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 		"is_ideology_enabled",
 		// The wiki says this can only be used at COUNTRY and PROVINCE scopes but I see no reason why it can't be global
 		_parse_condition_node_value_callback<Ideology const*>,
-		_execute_condition_node_unimplemented
+		_execute_condition_node_cast_argument_callback<Ideology const*, scope_t, scope_t, scope_t>(
+			[](
+				Condition const& condition, InstanceManager const& instance_manager, scope_t current_scope, scope_t this_scope,
+				scope_t from_scope, Ideology const* argument
+			) -> bool {
+				return instance_manager.get_politics_instance_manager().is_ideology_unlocked(*argument);
+			}
+		)
 	);
 	ret &= add_condition(
 		"is_independant", // paradox typo
@@ -2486,9 +2489,19 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 		_execute_condition_node_unimplemented
 	);
 	ret &= add_condition(
+		// This uses the British spelling, unlike the "any_neighbor_[country|province]" conditions which use the US spelling
 		"neighbour",
 		_parse_condition_node_value_callback<CountryDefinition const*, COUNTRY | THIS | FROM>,
-		_execute_condition_node_unimplemented
+		_execute_condition_node_value_or_cast_this_or_from_callback<CountryInstance const*>(
+			_execute_condition_node_convert_scope<CountryInstance, CountryInstance const*>(
+				[](
+					Condition const& condition, InstanceManager const& instance_manager, CountryInstance const* current_scope,
+					CountryInstance const* value
+				) -> bool {
+					return current_scope->is_neighbour(*value);
+				}
+			)
+		)
 	);
 	ret &= add_condition(
 		"num_of_allies",
