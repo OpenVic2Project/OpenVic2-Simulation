@@ -822,29 +822,29 @@ static constexpr auto _execute_condition_node_convert_scope(
 	};
 }
 
-template<typename RETURN_TYPE, typename SCOPE_TYPE, typename... Args>
-static constexpr auto _execute_condition_node_try_cast_scope(
-	Functor<
-		// return_type(condition, instance_manager, cast_scope, args...)
-		RETURN_TYPE, Condition const&, InstanceManager const&, SCOPE_TYPE, Args...
-	> auto success_callback,
-	Functor<
-		// return_type(condition, instance_manager, first_scope, args...)
-		RETURN_TYPE, Condition const&, InstanceManager const&, scope_t, Args...
-	> auto failure_callback
-) {
-	return [success_callback, failure_callback](
-		Condition const& condition, InstanceManager const& instance_manager, scope_t first_scope, Args... args
-	) -> RETURN_TYPE {
-		SCOPE_TYPE const* cast_scope = std::get_if<SCOPE_TYPE>(&first_scope);
+// template<typename RETURN_TYPE, typename SCOPE_TYPE, typename... Args>
+// static constexpr auto _execute_condition_node_try_cast_scope(
+// 	Functor<
+// 		// return_type(condition, instance_manager, cast_scope, args...)
+// 		RETURN_TYPE, Condition const&, InstanceManager const&, SCOPE_TYPE, Args...
+// 	> auto success_callback,
+// 	Functor<
+// 		// return_type(condition, instance_manager, first_scope, args...)
+// 		RETURN_TYPE, Condition const&, InstanceManager const&, scope_t, Args...
+// 	> auto failure_callback
+// ) {
+// 	return [success_callback, failure_callback](
+// 		Condition const& condition, InstanceManager const& instance_manager, scope_t first_scope, Args... args
+// 	) -> RETURN_TYPE {
+// 		SCOPE_TYPE const* cast_scope = std::get_if<SCOPE_TYPE>(&first_scope);
 
-		if (cast_scope != nullptr) {
-			return success_callback(condition, instance_manager, *cast_scope, args...);
-		} else {
-			return failure_callback(condition, instance_manager, first_scope, args...);
-		}
-	};
-}
+// 		if (cast_scope != nullptr) {
+// 			return success_callback(condition, instance_manager, *cast_scope, args...);
+// 		} else {
+// 			return failure_callback(condition, instance_manager, first_scope, args...);
+// 		}
+// 	};
+// }
 
 // template<typename RETURN_TYPE, typename SCOPE_TYPE, typename... Args>
 // static constexpr auto _execute_condition_node_cast_scope(
@@ -1032,48 +1032,121 @@ static constexpr auto _execute_condition_node_value_or_this_or_from_callback(
 }
 
 template<typename T>
-static constexpr auto _execute_condition_node_value_or_cast_this_or_from_callback(
+static constexpr auto _execute_condition_node_value_or_this_or_from_callback(
 	Callback<
 		// bool(condition, instance_manager, current_scope, value)
 		Condition const&, InstanceManager const&, scope_t, T const&
+	> auto value_callback,
+	Callback<
+		// bool(condition, instance_manager, current_scope, this_or_from_scope)
+		Condition const&, InstanceManager const&, scope_t, scope_t
+	> auto this_or_from_callback
+) {
+	return _execute_condition_node_value_or_this_or_from_callback<T>(
+		std::move(value_callback), this_or_from_callback, this_or_from_callback
+	);
+}
+
+// Handles THIS or FROM cases by converting them to values using this_or_from_to_value_callback and then using value_callback
+template<typename Value, typename Convert>
+static constexpr auto _execute_condition_node_value_or_convert_this_or_from_callback(
+	Callback<
+		// bool(condition, instance_manager, current_scope, value)
+		Condition const&, InstanceManager const&, scope_t, Value const&
+	> auto value_callback,
+	Functor<
+		// value(condition, instance_manager, this_or_from_scope)
+		Value, Condition const&, InstanceManager const&, Convert const*
+	> auto this_or_from_to_value_callback
+) {
+	return _execute_condition_node_value_or_this_or_from_callback<Value>(
+		value_callback,
+		[value_callback, this_or_from_to_value_callback](
+			Condition const& condition, InstanceManager const& instance_manager, scope_t current_scope,
+			scope_t this_or_from_scope
+		) -> bool {
+			return _execute_condition_node_convert_scope<Convert, scope_t>(
+				[value_callback, this_or_from_to_value_callback](
+					Condition const& condition, InstanceManager const& instance_manager, Convert const* this_or_from_scope,
+					scope_t current_scope
+				) -> bool {
+					return value_callback(condition, instance_manager, current_scope, this_or_from_to_value_callback(
+						condition, instance_manager, this_or_from_scope
+					));
+				}
+			)(condition, instance_manager, this_or_from_scope, current_scope);
+		}
+	);
+}
+
+// template<typename T>
+// static constexpr auto _execute_condition_node_value_or_cast_this_or_from_callback(
+// 	Callback<
+// 		// bool(condition, instance_manager, current_scope, value)
+// 		Condition const&, InstanceManager const&, scope_t, T const&
+// 	> auto callback
+// ) {
+// 	// If IS_THIS is false then the scope is FROM
+// 	const auto cast_scope_callback = [callback]<bool IS_THIS>(
+// 		Condition const& condition, InstanceManager const& instance_manager, scope_t current_scope, scope_t this_or_from_scope
+// 	) -> bool {
+// 		T const* cast_this_or_from_scope = std::get_if<T>(&this_or_from_scope);
+
+// 		if (cast_this_or_from_scope == nullptr) {
+// 			Logger::error(
+// 				"Error executing condition \"", condition.get_identifier(), "\": invalid ", IS_THIS ? "THIS" : "FROM",
+// 				" scope for condition node - expected ", typeid(T).name()
+// 			);
+// 			// TODO - are we sure the fail case is always false here? We may want to manipulate this elsewhere in the callchain
+// 			// to ensure negated conditions always return the correct result.
+// 			return false;
+// 		}
+
+// 		return callback(condition, instance_manager, current_scope, *cast_this_or_from_scope);
+// 	};
+
+// 	return _execute_condition_node_value_or_this_or_from_callback<T>(
+// 		callback,
+// 		[cast_scope_callback](
+// 			Condition const& condition, InstanceManager const& instance_manager, scope_t current_scope,
+// 			scope_t this_or_from_scope
+// 		) -> bool {
+// 			return cast_scope_callback.template operator()<true>(
+// 				condition, instance_manager, current_scope, this_or_from_scope
+// 			);
+// 		},
+// 		[cast_scope_callback](
+// 			Condition const& condition, InstanceManager const& instance_manager, scope_t current_scope,
+// 			scope_t this_or_from_scope
+// 		) -> bool {
+// 			return cast_scope_callback.template operator()<false>(
+// 				condition, instance_manager, current_scope, this_or_from_scope
+// 			);
+// 		}
+// 	);
+// }
+
+template<typename T>
+static constexpr auto _execute_condition_node_value_or_convert_this_or_from_callback(
+	Callback<
+		// bool(condition, instance_manager, current_scope, value)
+		Condition const&, InstanceManager const&, scope_t, T const*
 	> auto callback
 ) {
-	// If IS_THIS is false then the scope is FROM
-	const auto cast_scope_callback = [callback]<bool IS_THIS>(
-		Condition const& condition, InstanceManager const& instance_manager, scope_t current_scope, scope_t this_or_from_scope
-	) -> bool {
-		T const* cast_this_or_from_scope = std::get_if<T>(&this_or_from_scope);
-
-		if (cast_this_or_from_scope == nullptr) {
-			Logger::error(
-				"Error executing condition \"", condition.get_identifier(), "\": invalid ", IS_THIS ? "THIS" : "FROM",
-				" scope for condition node - expected ", typeid(T).name()
-			);
-			// TODO - are we sure the fail case is always false here? We may want to manipulate this elsewhere in the callchain
-			// to ensure negated conditions always return the correct result.
-			return false;
-		}
-
-		return callback(condition, instance_manager, current_scope, *cast_this_or_from_scope);
-	};
-
-	return _execute_condition_node_value_or_this_or_from_callback<T>(
-		std::move(callback),
-		[cast_scope_callback](
+	return _execute_condition_node_value_or_this_or_from_callback<T const*>(
+		callback,
+		[callback](
 			Condition const& condition, InstanceManager const& instance_manager, scope_t current_scope,
 			scope_t this_or_from_scope
 		) -> bool {
-			return cast_scope_callback.template operator()<true>(
-				condition, instance_manager, current_scope, this_or_from_scope
-			);
-		},
-		[cast_scope_callback](
-			Condition const& condition, InstanceManager const& instance_manager, scope_t current_scope,
-			scope_t this_or_from_scope
-		) -> bool {
-			return cast_scope_callback.template operator()<false>(
-				condition, instance_manager, current_scope, this_or_from_scope
-			);
+			return _execute_condition_node_convert_scope<T, scope_t>(
+				[callback](
+					Condition const& condition, InstanceManager const& instance_manager, T const* this_or_from_scope,
+					scope_t current_scope
+				) -> bool {
+					return callback(condition, instance_manager, current_scope, this_or_from_scope);
+				}
+			)(condition, instance_manager, this_or_from_scope, current_scope);
 		}
 	);
 }
@@ -1650,7 +1723,7 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 		"alliance_with",
 		_parse_condition_node_value_callback<CountryDefinition const*, COUNTRY | THIS | FROM>,
 		_execute_condition_node_unimplemented
-		/*_execute_condition_node_value_or_cast_this_or_from_callback<CountryInstance const*>(
+		/*_execute_condition_node_value_or_convert_this_or_from_callback<CountryInstance>(
 			_execute_condition_node_convert_scope<CountryInstance, CountryInstance const*>(
 				[](
 					Condition const& condition, InstanceManager const& instance_manager, CountryInstance const* current_scope,
@@ -2180,22 +2253,37 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 		"industrial_score",
 		// This doesn't seem to work with regular country identifiers, they're treated as 0
 		_parse_condition_node_value_callback<fixed_point_t, COUNTRY | THIS | FROM>,
-		// TODO - THIS | FROM cases (could use _execute_condition_node_value_or_this_or_from_callback ???)
-		_execute_condition_node_cast_argument_callback<fixed_point_t, scope_t, scope_t, scope_t>(
-			_execute_condition_node_convert_scope<CountryInstance, scope_t, scope_t, fixed_point_t>(
+		_execute_condition_node_value_or_convert_this_or_from_callback<fixed_point_t, CountryInstance>(
+			_execute_condition_node_convert_scope<CountryInstance, fixed_point_t>(
 				[](
 					Condition const& condition, InstanceManager const& instance_manager, CountryInstance const* current_scope,
-					scope_t this_scope, scope_t from_scope, fixed_point_t argument
+					fixed_point_t argument
 				) -> bool {
 					return current_scope->get_industrial_power() >= argument;
-				}
-			)
+				} 
+			),
+			[](
+				Condition const& condition, InstanceManager const& instance_manager, CountryInstance const* this_or_from_scope
+			) -> fixed_point_t {
+				return this_or_from_scope->get_industrial_power();
+			}
 		)
 	);
 	ret &= add_condition(
 		"in_sphere",
 		_parse_condition_node_value_callback<CountryDefinition const*, COUNTRY | THIS | FROM>,
 		_execute_condition_node_unimplemented
+		/*_execute_condition_node_value_or_convert_this_or_from_callback<CountryInstance>(
+			_execute_condition_node_convert_scope<CountryInstance, CountryInstance const*>(
+				[](
+					Condition const& condition, InstanceManager const& instance_manager, CountryInstance const* current_scope,
+					CountryInstance const* value
+				) -> bool {
+					// TODO - check if *current_scope is in *value's sphere
+					return false;
+				}
+			)
+		)*/
 	);
 	ret &= add_condition(
 		"in_default",
@@ -2354,6 +2442,17 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 		"is_our_vassal",
 		_parse_condition_node_value_callback<CountryDefinition const*, COUNTRY | THIS | FROM>,
 		_execute_condition_node_unimplemented
+		/*_execute_condition_node_value_or_convert_this_or_from_callback<CountryInstance>(
+			_execute_condition_node_convert_scope<CountryInstance, CountryInstance const*>(
+				[](
+					Condition const& condition, InstanceManager const& instance_manager, CountryInstance const* current_scope,
+					CountryInstance const* value
+				) -> bool {
+					// TODO - check if *value is a vassal of *current_scope
+					return false;
+				}
+			)
+		)*/
 	);
 	ret &= add_condition(
 		"is_possible_vassal",
@@ -2364,7 +2463,29 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 		"is_releasable_vassal",
 		// Could also be country tag but not used in vanilla or mods + tooltip doesn't display
 		_parse_condition_node_value_callback<bool, COUNTRY | THIS | FROM>,
-		_execute_condition_node_unimplemented
+		_execute_condition_node_value_or_this_or_from_callback<bool>(
+			_execute_condition_node_convert_scope<CountryInstance, bool>(
+				[](
+					Condition const& condition, InstanceManager const& instance_manager, CountryInstance const* current_scope,
+					bool argument
+				) -> bool {
+					return current_scope->is_releasable_vassal() == argument;
+				}
+			),
+			[](
+				Condition const& condition, InstanceManager const& instance_manager, scope_t current_scope,
+				scope_t this_or_from_scope
+			) -> bool {
+				return _execute_condition_node_convert_scope<CountryInstance>(
+					[](
+						Condition const& condition, InstanceManager const& instance_manager,
+						CountryInstance const* this_or_from_scope
+					) -> bool {
+						return this_or_from_scope->is_releasable_vassal();
+					}
+				)(condition, instance_manager, this_or_from_scope);
+			}
+		)
 	);
 	ret &= add_condition(
 		"is_secondary_power",
@@ -2375,6 +2496,17 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 		"is_sphere_leader_of",
 		_parse_condition_node_value_callback<CountryDefinition const*, COUNTRY | THIS | FROM>,
 		_execute_condition_node_unimplemented
+		/*_execute_condition_node_value_or_convert_this_or_from_callback<CountryInstance>(
+			_execute_condition_node_convert_scope<CountryInstance, CountryInstance const*>(
+				[](
+					Condition const& condition, InstanceManager const& instance_manager, CountryInstance const* current_scope,
+					CountryInstance const* value
+				) -> bool {
+					// TODO - check if *value is in the sphere of *current_scope
+					return false;
+				}
+			)
+		)*/
 	);
 	ret &= add_condition(
 		"is_substate",
@@ -2436,12 +2568,37 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 		"military_access",
 		_parse_condition_node_value_callback<CountryDefinition const*, COUNTRY | THIS | FROM>,
 		_execute_condition_node_unimplemented
+		/*_execute_condition_node_value_or_convert_this_or_from_callback<CountryInstance>(
+			_execute_condition_node_convert_scope<CountryInstance, CountryInstance const*>(
+				[](
+					Condition const& condition, InstanceManager const& instance_manager, CountryInstance const* current_scope,
+					CountryInstance const* value
+				) -> bool {
+					// TODO - check if *current_scope has military access to *value
+					return false;
+				}
+			)
+		)*/
 	);
 	ret &= add_condition(
 		"military_score",
-		// Country identifiers don't seem to work, in tooltips they're treated as 0
+		// This doesn't seem to work with regular country identifiers, they're treated as 0
 		_parse_condition_node_value_callback<fixed_point_t, COUNTRY | THIS | FROM>,
-		_execute_condition_node_unimplemented
+		_execute_condition_node_value_or_convert_this_or_from_callback<fixed_point_t, CountryInstance>(
+			_execute_condition_node_convert_scope<CountryInstance, fixed_point_t>(
+				[](
+					Condition const& condition, InstanceManager const& instance_manager, CountryInstance const* current_scope,
+					fixed_point_t argument
+				) -> bool {
+					return current_scope->get_military_power() >= argument;
+				} 
+			),
+			[](
+				Condition const& condition, InstanceManager const& instance_manager, CountryInstance const* this_or_from_scope
+			) -> fixed_point_t {
+				return this_or_from_scope->get_military_power();
+			}
+		)
 	);
 	ret &= add_condition(
 		"militancy",
@@ -2492,7 +2649,7 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 		// This uses the British spelling, unlike the "any_neighbor_[country|province]" conditions which use the US spelling
 		"neighbour",
 		_parse_condition_node_value_callback<CountryDefinition const*, COUNTRY | THIS | FROM>,
-		_execute_condition_node_value_or_cast_this_or_from_callback<CountryInstance const*>(
+		_execute_condition_node_value_or_convert_this_or_from_callback<CountryInstance>(
 			_execute_condition_node_convert_scope<CountryInstance, CountryInstance const*>(
 				[](
 					Condition const& condition, InstanceManager const& instance_manager, CountryInstance const* current_scope,
@@ -2618,16 +2775,22 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 	);
 	ret &= add_condition(
 		"prestige",
-		_parse_condition_node_value_callback<fixed_point_t, COUNTRY>,
-		_execute_condition_node_cast_argument_callback<fixed_point_t, scope_t, scope_t, scope_t>(
-			_execute_condition_node_convert_scope<CountryInstance, scope_t, scope_t, fixed_point_t>(
+		// This doesn't seem to work with regular country identifiers, they're treated as 0
+		_parse_condition_node_value_callback<fixed_point_t, COUNTRY | THIS | FROM>,
+		_execute_condition_node_value_or_convert_this_or_from_callback<fixed_point_t, CountryInstance>(
+			_execute_condition_node_convert_scope<CountryInstance, fixed_point_t>(
 				[](
 					Condition const& condition, InstanceManager const& instance_manager, CountryInstance const* current_scope,
-					scope_t this_scope, scope_t from_scope, fixed_point_t argument
+					fixed_point_t argument
 				) -> bool {
 					return current_scope->get_prestige() >= argument;
-				}
-			)
+				} 
+			),
+			[](
+				Condition const& condition, InstanceManager const& instance_manager, CountryInstance const* this_or_from_scope
+			) -> fixed_point_t {
+				return this_or_from_scope->get_prestige();
+			}
 		)
 	);
 	ret &= add_condition(
@@ -2771,11 +2934,31 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 		"substate_of",
 		_parse_condition_node_value_callback<CountryDefinition const*, COUNTRY | THIS | FROM>,
 		_execute_condition_node_unimplemented
+		/*_execute_condition_node_value_or_convert_this_or_from_callback<CountryInstance>(
+			_execute_condition_node_convert_scope<CountryInstance, CountryInstance const*>(
+				[](
+					Condition const& condition, InstanceManager const& instance_manager, CountryInstance const* current_scope,
+					CountryInstance const* value
+				) -> bool {
+					// TODO - check if *current_scope is a substate of *value
+					return false;
+				}
+			)
+		)*/
 	);
 	ret &= add_condition(
 		"tag",
 		_parse_condition_node_value_callback<CountryDefinition const*, COUNTRY | THIS | FROM>,
-		_execute_condition_node_unimplemented
+		_execute_condition_node_value_or_convert_this_or_from_callback<CountryInstance>(
+			_execute_condition_node_convert_scope<CountryInstance, CountryInstance const*>(
+				[](
+					Condition const& condition, InstanceManager const& instance_manager, CountryInstance const* current_scope,
+					CountryInstance const* value
+				) -> bool {
+					return current_scope == value;
+				}
+			)
+		)
 	);
 	ret &= add_condition(
 		"tech_school",
@@ -2873,6 +3056,17 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 		"truce_with",
 		_parse_condition_node_value_callback<CountryDefinition const*, COUNTRY | THIS | FROM>,
 		_execute_condition_node_unimplemented
+		/*_execute_condition_node_value_or_convert_this_or_from_callback<CountryInstance>(
+			_execute_condition_node_convert_scope<CountryInstance, CountryInstance const*>(
+				[](
+					Condition const& condition, InstanceManager const& instance_manager, CountryInstance const* current_scope,
+					CountryInstance const* value
+				) -> bool {
+					// TODO - check if *current_scope has a truce with *value
+					return false;
+				}
+			)
+		)*/
 	);
 	ret &= add_condition(
 		"unemployment",
@@ -2896,6 +3090,17 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 		"vassal_of",
 		_parse_condition_node_value_callback<CountryDefinition const*, COUNTRY | THIS | FROM>,
 		_execute_condition_node_unimplemented
+		/*_execute_condition_node_value_or_convert_this_or_from_callback<CountryInstance>(
+			_execute_condition_node_convert_scope<CountryInstance, CountryInstance const*>(
+				[](
+					Condition const& condition, InstanceManager const& instance_manager, CountryInstance const* current_scope,
+					CountryInstance const* value
+				) -> bool {
+					// TODO - check if *current_scope is a vassal of *value
+					return false;
+				}
+			)
+		)*/
 	);
 	ret &= add_condition(
 		"war",
@@ -2934,6 +3139,17 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 		"war_with",
 		_parse_condition_node_value_callback<CountryDefinition const*, COUNTRY | THIS | FROM>,
 		_execute_condition_node_unimplemented
+		/*_execute_condition_node_value_or_convert_this_or_from_callback<CountryInstance>(
+			_execute_condition_node_convert_scope<CountryInstance, CountryInstance const*>(
+				[](
+					Condition const& condition, InstanceManager const& instance_manager, CountryInstance const* current_scope,
+					CountryInstance const* value
+				) -> bool {
+					// TODO - check if *current_scope is at war with *value
+					return false;
+				}
+			)
+		)*/
 	);
 	// TODO - Undocumented, only seen used in PDM and Victoria 1.02 as "someone_can_form_union_tag = FROM", recognized by the game engine as valid
 	ret &= add_condition(
@@ -3005,7 +3221,16 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 	ret &= add_condition(
 		"owned_by",
 		_parse_condition_node_value_callback<CountryDefinition const*, PROVINCE | THIS | FROM>,
-		_execute_condition_node_unimplemented
+		_execute_condition_node_value_or_convert_this_or_from_callback<CountryInstance>(
+			_execute_condition_node_convert_scope<ProvinceInstance, CountryInstance const*>(
+				[](
+					Condition const& condition, InstanceManager const& instance_manager, ProvinceInstance const* current_scope,
+					CountryInstance const* value
+				) -> bool {
+					return current_scope->get_owner() == value;
+				}
+			)
+		)
 	);
 	ret &= add_condition(
 		"trade_goods_in_state",
@@ -3032,7 +3257,25 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 	ret &= add_condition(
 		"country_units_in_province",
 		_parse_condition_node_value_callback<CountryDefinition const*, PROVINCE | THIS | FROM>,
-		_execute_condition_node_unimplemented
+		_execute_condition_node_value_or_convert_this_or_from_callback<CountryInstance>(
+			_execute_condition_node_convert_scope<ProvinceInstance, CountryInstance const*>(
+				[](
+					Condition const& condition, InstanceManager const& instance_manager, ProvinceInstance const* current_scope,
+					CountryInstance const* value
+				) -> bool {
+					using enum UnitType::branch_t;
+					const auto has_units = [current_scope, value]<UnitType::branch_t Branch>() -> bool {
+						for (UnitInstanceGroup<Branch> const* unit : current_scope->get_unit_instance_groups<Branch>()) {
+							if (unit->get_country() == value) {
+								return true;
+							}
+						}
+						return false;
+					};
+					return has_units.template operator()<LAND>() || has_units.template operator()<NAVAL>();
+				}
+			)
+		)
 	);
 	// Doesn't appear in vanilla or any test mods
 	// ret &= add_condition("country_units_in_state", IDENTIFIER, PROVINCE, NO_SCOPE, NO_IDENTIFIER, COUNTRY_TAG);
