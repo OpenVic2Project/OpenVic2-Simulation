@@ -1047,9 +1047,35 @@ static constexpr auto _execute_condition_node_value_or_this_or_from_callback(
 	);
 }
 
-// Handles THIS or FROM cases by converting them to values using this_or_from_to_value_callback and then using value_callback
+// Handles THIS or FROM cases by changing them to values using this_or_from_to_value_callback and then using value_callback
+template<typename Value>
+static constexpr auto _execute_condition_node_value_or_change_this_or_from_callback(
+	Callback<
+		// bool(condition, instance_manager, current_scope, value)
+		Condition const&, InstanceManager const&, scope_t, Value const&
+	> auto value_callback,
+	Functor<
+		// value(condition, instance_manager, this_or_from_scope)
+		Value, Condition const&, InstanceManager const&, scope_t
+	> auto this_or_from_to_value_callback
+) {
+	return _execute_condition_node_value_or_this_or_from_callback<Value>(
+		value_callback,
+		[value_callback, this_or_from_to_value_callback](
+			Condition const& condition, InstanceManager const& instance_manager, scope_t current_scope,
+			scope_t this_or_from_scope
+		) -> bool {
+			return value_callback(condition, instance_manager, current_scope, this_or_from_to_value_callback(
+				condition, instance_manager, this_or_from_scope
+			));
+		}
+	);
+}
+
+// Handles THIS or FROM cases by changing them to values using this_or_from_to_value_callback (after converting scope with
+// _execute_condition_node_convert_scope) and then using value_callback
 template<typename Value, typename Convert>
-static constexpr auto _execute_condition_node_value_or_convert_this_or_from_callback(
+static constexpr auto _execute_condition_node_value_or_change_this_or_from_callback_convert(
 	Callback<
 		// bool(condition, instance_manager, current_scope, value)
 		Condition const&, InstanceManager const&, scope_t, Value const&
@@ -1746,9 +1772,6 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 				struct visitor_t {
 
 					Condition const& condition;
-					InstanceManager const& instance_manager;
-					scope_t const& this_scope;
-					scope_t const& from_scope;
 					fixed_point_t const& argument;
 
 					bool operator()(no_scope_t no_scope) const {
@@ -1756,7 +1779,7 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 						return false;
 					}
 
-					constexpr bool operator()(CountryInstance const* country) {
+					constexpr bool operator()(CountryInstance const* country) const {
 						return country->get_national_consciousness() >= argument;
 					}
 					constexpr bool operator()(State const* state) const {
@@ -1770,9 +1793,7 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 					}
 				};
 
-				return std::visit(visitor_t {
-					condition, instance_manager, this_scope, from_scope, argument
-				}, current_scope);
+				return std::visit(visitor_t { condition, argument }, current_scope);
 			}
 		)
 	);
@@ -1787,9 +1808,6 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 				struct visitor_t {
 
 					Condition const& condition;
-					InstanceManager const& instance_manager;
-					scope_t const& this_scope;
-					scope_t const& from_scope;
 					fixed_point_t const& argument;
 
 					bool operator()(no_scope_t no_scope) const {
@@ -1797,7 +1815,7 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 						return false;
 					}
 
-					constexpr bool operator()(CountryInstance const* country) {
+					constexpr bool operator()(CountryInstance const* country) const {
 						return country->get_national_militancy() >= argument;
 					}
 					constexpr bool operator()(State const* state) const {
@@ -1811,9 +1829,7 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 					}
 				};
 
-				return std::visit(visitor_t {
-					condition, instance_manager, this_scope, from_scope, argument
-				}, current_scope);
+				return std::visit(visitor_t { condition, argument }, current_scope);
 			}
 		)
 	);
@@ -1915,6 +1931,17 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 		"casus_belli",
 		_parse_condition_node_value_callback<CountryDefinition const*, COUNTRY | THIS | FROM>,
 		_execute_condition_node_unimplemented
+		/*_execute_condition_node_value_or_convert_this_or_from_callback<CountryInstance>(
+			_execute_condition_node_convert_scope<CountryInstance, CountryInstance const*>(
+				[](
+					Condition const& condition, InstanceManager const& instance_manager, CountryInstance const* current_scope,
+					CountryInstance const* value
+				) -> bool {
+					// TODO - check if *current_scope has an active CB against *value
+					return false;
+				}
+			)
+		)*/
 	);
 	ret &= add_condition(
 		"check_variable",
@@ -1995,6 +2022,17 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 		"constructing_cb",
 		_parse_condition_node_value_callback<CountryDefinition const*, COUNTRY | THIS | FROM>,
 		_execute_condition_node_unimplemented
+		/*_execute_condition_node_value_or_convert_this_or_from_callback<CountryInstance>(
+			_execute_condition_node_convert_scope<CountryInstance, CountryInstance const*>(
+				[](
+					Condition const& condition, InstanceManager const& instance_manager, CountryInstance const* current_scope,
+					CountryInstance const* value
+				) -> bool {
+					// TODO - check if *current_scope is constructing a CB against *value
+					return false;
+				}
+			)
+		)*/
 	);
 	ret &= add_condition(
 		"constructing_cb_progress",
@@ -2223,17 +2261,168 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 	ret &= add_condition(
 		"has_pop_culture",
 		_parse_condition_node_value_callback<Culture const*, COUNTRY | PROVINCE | POP | THIS | FROM>,
-		_execute_condition_node_unimplemented
+		_execute_condition_node_value_or_change_this_or_from_callback<Culture const*>(
+			[](
+				Condition const& condition, InstanceManager const& instance_manager, scope_t current_scope,
+				Culture const* argument
+			) -> bool {
+				struct visitor_t {
+
+					Condition const& condition;
+					Culture const* argument;
+
+					bool operator()(no_scope_t no_scope) const {
+						Logger::error("Error executing condition \"", condition.get_identifier(), "\": no current scope!");
+						return false;
+					}
+
+					bool operator()(CountryInstance const* country) const {
+						return country->get_culture_proportion(*argument) > 0;
+					}
+					bool operator()(State const* state) const {
+						return state->get_culture_proportion(*argument) > 0;
+					}
+					bool operator()(ProvinceInstance const* province) const {
+						return province->get_culture_proportion(*argument) > 0;
+					}
+					bool operator()(Pop const* pop) const {
+						return &pop->get_culture() == argument;
+					}
+				};
+
+				return argument != nullptr && std::visit(visitor_t { condition, argument }, current_scope);
+			},
+			[](
+				Condition const& condition, InstanceManager const& instance_manager, scope_t this_or_from_scope
+			) -> Culture const* {
+				struct visitor_t {
+
+					Condition const& condition;
+
+					Culture const* operator()(no_scope_t no_scope) const {
+						Logger::error("Error executing condition \"", condition.get_identifier(), "\": no THIS/FROM scope!");
+						return nullptr;
+					}
+
+					constexpr Culture const* operator()(CountryInstance const* country) const {
+						return country->get_primary_culture();
+					}
+					constexpr Culture const* operator()(State const* state) const {
+						return (*this)(state->get_owner());
+					}
+					constexpr Culture const* operator()(ProvinceInstance const* province) const {
+						CountryInstance const* owner = province->get_owner();
+						return owner != nullptr ? (*this)(owner) : nullptr;
+					}
+					constexpr Culture const* operator()(Pop const* pop) const {
+						return &pop->get_culture();
+					}
+				};
+
+				return std::visit(visitor_t { condition }, this_or_from_scope);
+			}
+		)
 	);
 	ret &= add_condition(
 		"has_pop_religion",
 		_parse_condition_node_value_callback<Religion const*, COUNTRY | PROVINCE | POP | THIS | FROM>,
-		_execute_condition_node_unimplemented
+		_execute_condition_node_value_or_change_this_or_from_callback<Religion const*>(
+			[](
+				Condition const& condition, InstanceManager const& instance_manager, scope_t current_scope,
+				Religion const* argument
+			) -> bool {
+				struct visitor_t {
+
+					Condition const& condition;
+					Religion const* argument;
+
+					bool operator()(no_scope_t no_scope) const {
+						Logger::error("Error executing condition \"", condition.get_identifier(), "\": no current scope!");
+						return false;
+					}
+
+					bool operator()(CountryInstance const* country) const {
+						return country->get_religion_proportion(*argument) > 0;
+					}
+					bool operator()(State const* state) const {
+						return state->get_religion_proportion(*argument) > 0;
+					}
+					bool operator()(ProvinceInstance const* province) const {
+						return province->get_religion_proportion(*argument) > 0;
+					}
+					bool operator()(Pop const* pop) const {
+						return &pop->get_religion() == argument;
+					}
+				};
+
+				return argument != nullptr && std::visit(visitor_t { condition, argument }, current_scope);
+			},
+			[](
+				Condition const& condition, InstanceManager const& instance_manager, scope_t this_or_from_scope
+			) -> Religion const* {
+				struct visitor_t {
+
+					Condition const& condition;
+
+					Religion const* operator()(no_scope_t no_scope) const {
+						Logger::error("Error executing condition \"", condition.get_identifier(), "\": no THIS/FROM scope!");
+						return nullptr;
+					}
+
+					constexpr Religion const* operator()(CountryInstance const* country) const {
+						return country->get_religion();
+					}
+					constexpr Religion const* operator()(State const* state) const {
+						return (*this)(state->get_owner());
+					}
+					constexpr Religion const* operator()(ProvinceInstance const* province) const {
+						CountryInstance const* owner = province->get_owner();
+						return owner != nullptr ? (*this)(owner) : nullptr;
+					}
+					constexpr Religion const* operator()(Pop const* pop) const {
+						return &pop->get_religion();
+					}
+				};
+
+				return std::visit(visitor_t { condition }, this_or_from_scope);
+			}
+		)
 	);
 	ret &= add_condition(
 		"has_pop_type",
 		_parse_condition_node_value_callback<PopType const*, COUNTRY | PROVINCE | POP>,
-		_execute_condition_node_unimplemented
+		_execute_condition_node_cast_argument_callback<PopType const*, scope_t, scope_t, scope_t>(
+			[](
+				Condition const& condition, InstanceManager const& instance_manager, scope_t current_scope, scope_t this_scope,
+				scope_t from_scope, PopType const* argument
+			) -> bool {
+				struct visitor_t {
+
+					Condition const& condition;
+					PopType const* argument;
+
+					bool operator()(no_scope_t no_scope) const {
+						Logger::error("Error executing condition \"", condition.get_identifier(), "\": no current scope!");
+						return false;
+					}
+
+					bool operator()(CountryInstance const* country) const {
+						return country->get_pop_type_proportion(*argument) > 0;
+					}
+					bool operator()(State const* state) const {
+						return state->get_pop_type_proportion(*argument) > 0;
+					}
+					bool operator()(ProvinceInstance const* province) const {
+						return province->get_pop_type_proportion(*argument) > 0;
+					}
+					bool operator()(Pop const* pop) const {
+						return pop->get_type() == argument;
+					}
+				};
+
+				return argument != nullptr && std::visit(visitor_t { condition, argument }, current_scope);
+			}
+		)
 	);
 	ret &= add_condition(
 		// checks if the country has lost a war in the last 5 years (losing = making a concession offer,
@@ -2253,7 +2442,7 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 		"industrial_score",
 		// This doesn't seem to work with regular country identifiers, they're treated as 0
 		_parse_condition_node_value_callback<fixed_point_t, COUNTRY | THIS | FROM>,
-		_execute_condition_node_value_or_convert_this_or_from_callback<fixed_point_t, CountryInstance>(
+		_execute_condition_node_value_or_change_this_or_from_callback_convert<fixed_point_t, CountryInstance>(
 			_execute_condition_node_convert_scope<CountryInstance, fixed_point_t>(
 				[](
 					Condition const& condition, InstanceManager const& instance_manager, CountryInstance const* current_scope,
@@ -2529,9 +2718,6 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 				struct visitor_t {
 
 					Condition const& condition;
-					InstanceManager const& instance_manager;
-					scope_t const& this_scope;
-					scope_t const& from_scope;
 					fixed_point_t const& argument;
 
 					bool operator()(no_scope_t no_scope) const {
@@ -2539,7 +2725,7 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 						return false;
 					}
 
-					constexpr bool operator()(CountryInstance const* country) {
+					constexpr bool operator()(CountryInstance const* country) const {
 						return country->get_national_literacy() >= argument;
 					}
 					constexpr bool operator()(State const* state) const {
@@ -2553,9 +2739,7 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 					}
 				};
 
-				return std::visit(visitor_t {
-					condition, instance_manager, this_scope, from_scope, argument
-				}, current_scope);
+				return std::visit(visitor_t { condition, argument }, current_scope);
 			}
 		)
 	);
@@ -2584,7 +2768,7 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 		"military_score",
 		// This doesn't seem to work with regular country identifiers, they're treated as 0
 		_parse_condition_node_value_callback<fixed_point_t, COUNTRY | THIS | FROM>,
-		_execute_condition_node_value_or_convert_this_or_from_callback<fixed_point_t, CountryInstance>(
+		_execute_condition_node_value_or_change_this_or_from_callback_convert<fixed_point_t, CountryInstance>(
 			_execute_condition_node_convert_scope<CountryInstance, fixed_point_t>(
 				[](
 					Condition const& condition, InstanceManager const& instance_manager, CountryInstance const* current_scope,
@@ -2777,7 +2961,7 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 		"prestige",
 		// This doesn't seem to work with regular country identifiers, they're treated as 0
 		_parse_condition_node_value_callback<fixed_point_t, COUNTRY | THIS | FROM>,
-		_execute_condition_node_value_or_convert_this_or_from_callback<fixed_point_t, CountryInstance>(
+		_execute_condition_node_value_or_change_this_or_from_callback_convert<fixed_point_t, CountryInstance>(
 			_execute_condition_node_convert_scope<CountryInstance, fixed_point_t>(
 				[](
 					Condition const& condition, InstanceManager const& instance_manager, CountryInstance const* current_scope,
@@ -3013,9 +3197,6 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 				struct visitor_t {
 
 					Condition const& condition;
-					InstanceManager const& instance_manager;
-					scope_t const& this_scope;
-					scope_t const& from_scope;
 					integer_t const& argument;
 
 					bool operator()(no_scope_t no_scope) const {
@@ -3023,7 +3204,7 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 						return false;
 					}
 
-					constexpr bool operator()(CountryInstance const* country) {
+					constexpr bool operator()(CountryInstance const* country) const {
 						return country->get_total_population() >= argument;
 					}
 					constexpr bool operator()(State const* state) const {
@@ -3037,9 +3218,7 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 					}
 				};
 
-				return std::visit(visitor_t {
-					condition, instance_manager, this_scope, from_scope, argument
-				}, current_scope);
+				return std::visit(visitor_t { condition, argument }, current_scope);
 			}
 		)
 	);
@@ -3572,9 +3751,6 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 					struct visitor_t {
 
 						Condition const& condition;
-						InstanceManager const& instance_manager;
-						scope_t const& this_scope;
-						scope_t const& from_scope;
 						fixed_point_t const& argument;
 						Ideology const& ideology;
 
@@ -3583,7 +3759,7 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 							return false;
 						}
 
-						bool operator()(CountryInstance const* country) {
+						bool operator()(CountryInstance const* country) const {
 							return country->get_ideology_support(ideology) >= argument * country->get_total_population();
 						}
 						bool operator()(State const* state) const {
@@ -3597,9 +3773,7 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 						}
 					};
 
-					return std::visit(visitor_t {
-						condition, instance_manager, this_scope, from_scope, argument, ideology
-					}, current_scope);
+					return std::visit(visitor_t { condition, argument, ideology }, current_scope);
 				}
 			)
 		);
