@@ -653,6 +653,12 @@ static bool _execute_condition_node_unimplemented(
 	Logger::error("Cannot execute condition \"", condition.get_identifier(), "\" - callback unimplemented!");
 	return false;
 }
+static bool _execute_condition_node_unimplemented_no_error(
+	Condition const& condition, InstanceManager const& instance_manager, scope_t current_scope, scope_t this_scope,
+	scope_t from_scope, argument_t const& argument
+) {
+	return false;
+}
 
 /*
 	- Convert to CountryInstance const*...
@@ -1484,7 +1490,16 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 	ret &= add_condition(
 		"country",
 		_parse_condition_node_list_callback<COUNTRY, COUNTRY | POP>,
-		_execute_condition_node_unimplemented
+		_execute_condition_node_convert_scope<CountryInstance, scope_t, scope_t, argument_t const&>(
+			_execute_condition_node_list_single_scope_callback<expect_true, require_all, CountryInstance const*>(
+				[](
+					Condition const& condition, InstanceManager const& instance_manager, CountryInstance const* current_scope,
+					scope_t this_scope, scope_t from_scope
+				) -> scope_t {
+					return current_scope;
+				}
+			)
+		)
 	);
 	ret &= add_condition(
 		"cultural_union",
@@ -2449,7 +2464,7 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 					fixed_point_t argument
 				) -> bool {
 					return current_scope->get_industrial_power() >= argument;
-				} 
+				}
 			),
 			[](
 				Condition const& condition, InstanceManager const& instance_manager, CountryInstance const* this_or_from_scope
@@ -2775,7 +2790,7 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 					fixed_point_t argument
 				) -> bool {
 					return current_scope->get_military_power() >= argument;
-				} 
+				}
 			),
 			[](
 				Condition const& condition, InstanceManager const& instance_manager, CountryInstance const* this_or_from_scope
@@ -2787,7 +2802,16 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 	ret &= add_condition(
 		"militancy",
 		_parse_condition_node_value_callback<fixed_point_t, POP>,
-		_execute_condition_node_unimplemented
+		_execute_condition_node_cast_argument_callback<fixed_point_t, scope_t, scope_t, scope_t>(
+			_execute_condition_node_convert_scope<Pop, scope_t, scope_t, fixed_point_t>(
+				[](
+					Condition const& condition, InstanceManager const& instance_manager, Pop const* current_scope,
+					scope_t this_scope, scope_t from_scope, fixed_point_t argument
+				) -> bool {
+					return current_scope->get_militancy() >= argument;
+				}
+			)
+		)
 	);
 	ret &= add_condition(
 		"military_spending",
@@ -2932,9 +2956,10 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 		_execute_condition_node_unimplemented
 	);
 	ret &= add_condition(
+		// TODO - reform desire / movement_support_uh_factor * non-colonial-population
 		"political_reform_want",
 		_parse_condition_node_value_callback<fixed_point_t, COUNTRY | POP>,
-		_execute_condition_node_unimplemented
+		_execute_condition_node_unimplemented_no_error
 	);
 	ret &= add_condition(
 		"pop_majority_culture",
@@ -2955,7 +2980,16 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 		"pop_militancy",
 		// The wiki also says this can be used at COUNTRY scope
 		_parse_condition_node_value_callback<fixed_point_t, PROVINCE>,
-		_execute_condition_node_unimplemented
+		_execute_condition_node_cast_argument_callback<fixed_point_t, scope_t, scope_t, scope_t>(
+			_execute_condition_node_convert_scope<Pop, scope_t, scope_t, fixed_point_t>(
+				[](
+					Condition const& condition, InstanceManager const& instance_manager, Pop const* current_scope,
+					scope_t this_scope, scope_t from_scope, fixed_point_t argument
+				) -> bool {
+					return current_scope->get_militancy() >= argument;
+				}
+			)
+		)
 	);
 	ret &= add_condition(
 		"prestige",
@@ -2968,7 +3002,7 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 					fixed_point_t argument
 				) -> bool {
 					return current_scope->get_prestige() >= argument;
-				} 
+				}
 			),
 			[](
 				Condition const& condition, InstanceManager const& instance_manager, CountryInstance const* this_or_from_scope
@@ -3049,7 +3083,18 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 	ret &= add_condition(
 		"revanchism",
 		_parse_condition_node_value_callback<fixed_point_t, COUNTRY>,
-		_execute_condition_node_unimplemented
+		_execute_condition_node_cast_argument_callback<fixed_point_t, scope_t, scope_t, scope_t>(
+			_execute_condition_node_convert_scope<CountryInstance, scope_t, scope_t, fixed_point_t>(
+				[](
+					Condition const& condition, InstanceManager const& instance_manager, CountryInstance const* current_scope,
+					scope_t this_scope, scope_t from_scope, fixed_point_t argument
+				) -> bool {
+					// TODO - work out exactly what scale is used for country revanchism and the condition's argument
+					// (condition tooltips treat it as a raw decimal, but it's always used as if it's a proportion out of 1)
+					return current_scope->get_revanchism() >= argument;
+				}
+			)
+		)
 	);
 	ret &= add_condition(
 		"revolt_percentage",
@@ -3096,7 +3141,7 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 	ret &= add_condition(
 		"social_reform_want",
 		_parse_condition_node_value_callback<fixed_point_t, COUNTRY | POP>,
-		_execute_condition_node_unimplemented
+		_execute_condition_node_unimplemented_no_error
 	);
 	ret &= add_condition(
 		"social_spending",
@@ -3601,9 +3646,18 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 		_execute_condition_node_unimplemented
 	);
 	ret &= add_condition(
-		"units_in_province",
+		"units_in_province", // Counts number of land regiments, including those being transported by navies
 		_parse_condition_node_value_callback<integer_t, PROVINCE>,
-		_execute_condition_node_unimplemented
+		_execute_condition_node_cast_argument_callback<integer_t, scope_t, scope_t, scope_t>(
+			_execute_condition_node_convert_scope<ProvinceInstance, scope_t, scope_t, integer_t>(
+				[](
+					Condition const& condition, InstanceManager const& instance_manager, ProvinceInstance const* current_scope,
+					scope_t this_scope, scope_t from_scope, integer_t argument
+				) -> bool {
+					return current_scope->get_land_regiment_count() >= argument;
+				}
+			)
+		)
 	);
 
 	/* Pop Scope Conditions */
@@ -3613,24 +3667,51 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 		_execute_condition_node_unimplemented
 	);
 	ret &= add_condition(
-		"cash_reserves",
+		"cash_reserves", // argument represents a percentage of daily needs rather than absolute value of £
 		_parse_condition_node_value_callback<fixed_point_t, POP>,
 		_execute_condition_node_unimplemented
 	);
 	ret &= add_condition(
 		"life_needs",
 		_parse_condition_node_value_callback<fixed_point_t, POP>,
-		_execute_condition_node_unimplemented
+		_execute_condition_node_cast_argument_callback<fixed_point_t, scope_t, scope_t, scope_t>(
+			_execute_condition_node_convert_scope<Pop, scope_t, scope_t, fixed_point_t>(
+				[](
+					Condition const& condition, InstanceManager const& instance_manager, Pop const* current_scope,
+					scope_t this_scope, scope_t from_scope, fixed_point_t argument
+				) -> bool {
+					return current_scope->get_life_needs_fulfilled() == argument;
+				}
+			)
+		)
 	);
 	ret &= add_condition(
 		"everyday_needs",
 		_parse_condition_node_value_callback<fixed_point_t, POP>,
-		_execute_condition_node_unimplemented
+		_execute_condition_node_cast_argument_callback<fixed_point_t, scope_t, scope_t, scope_t>(
+			_execute_condition_node_convert_scope<Pop, scope_t, scope_t, fixed_point_t>(
+				[](
+					Condition const& condition, InstanceManager const& instance_manager, Pop const* current_scope,
+					scope_t this_scope, scope_t from_scope, fixed_point_t argument
+				) -> bool {
+					return current_scope->get_everyday_needs_fulfilled() == argument;
+				}
+			)
+		)
 	);
 	ret &= add_condition(
 		"luxury_needs",
 		_parse_condition_node_value_callback<fixed_point_t, POP>,
-		_execute_condition_node_unimplemented
+		_execute_condition_node_cast_argument_callback<fixed_point_t, scope_t, scope_t, scope_t>(
+			_execute_condition_node_convert_scope<Pop, scope_t, scope_t, fixed_point_t>(
+				[](
+					Condition const& condition, InstanceManager const& instance_manager, Pop const* current_scope,
+					scope_t this_scope, scope_t from_scope, fixed_point_t argument
+				) -> bool {
+					return current_scope->get_luxury_needs_fulfilled() == argument;
+				}
+			)
+		)
 	);
 	ret &= add_condition(
 		"political_movement",
@@ -3642,7 +3723,16 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 	ret &= add_condition(
 		"pop_type",
 		_parse_condition_node_value_callback<PopType const*, POP>,
-		_execute_condition_node_unimplemented
+		_execute_condition_node_cast_argument_callback<PopType const*, scope_t, scope_t, scope_t>(
+			_execute_condition_node_convert_scope<Pop, scope_t, scope_t, PopType const*>(
+				[](
+					Condition const& condition, InstanceManager const& instance_manager, Pop const* current_scope,
+					scope_t this_scope, scope_t from_scope, PopType const* argument
+				) -> bool {
+					return current_scope->get_type() == argument;
+				}
+			)
+		)
 	);
 	ret &= add_condition(
 		"social_movement",
@@ -3652,12 +3742,30 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 	ret &= add_condition(
 		"strata",
 		_parse_condition_node_value_callback<Strata const*, POP>,
-		_execute_condition_node_unimplemented
+		_execute_condition_node_cast_argument_callback<Strata const*, scope_t, scope_t, scope_t>(
+			_execute_condition_node_convert_scope<Pop, scope_t, scope_t, Strata const*>(
+				[](
+					Condition const& condition, InstanceManager const& instance_manager, Pop const* current_scope,
+					scope_t this_scope, scope_t from_scope, Strata const* argument
+				) -> bool {
+					return &current_scope->get_type()->get_strata() == argument;
+				}
+			)
+		)
 	);
 	ret &= add_condition(
 		"type",
 		_parse_condition_node_value_callback<PopType const*, POP>,
-		_execute_condition_node_unimplemented
+		_execute_condition_node_cast_argument_callback<PopType const*, scope_t, scope_t, scope_t>(
+			_execute_condition_node_convert_scope<Pop, scope_t, scope_t, PopType const*>(
+				[](
+					Condition const& condition, InstanceManager const& instance_manager, Pop const* current_scope,
+					scope_t this_scope, scope_t from_scope, PopType const* argument
+				) -> bool {
+					return current_scope->get_type() == argument;
+				}
+			)
+		)
 	);
 
 	for (Strata const& strata : definition_manager.get_pop_manager().get_stratas()) {
@@ -3666,27 +3774,176 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 		ret &= add_condition(
 			StringUtils::append_string_views(identifier, "_tax"),
 			_parse_condition_node_value_callback<fixed_point_t, COUNTRY>,
-			_execute_condition_node_unimplemented
+			_execute_condition_node_cast_argument_callback<fixed_point_t, scope_t, scope_t, scope_t>(
+				_execute_condition_node_convert_scope<CountryInstance, scope_t, scope_t, fixed_point_t>(
+					[&strata](
+						Condition const& condition, InstanceManager const& instance_manager,
+						CountryInstance const* current_scope, scope_t this_scope, scope_t from_scope, fixed_point_t argument
+					) -> bool {
+						return current_scope->get_tax_rate_by_strata()[strata].get_value() >=
+							argument * CountryInstance::SLIDER_SIZE;
+					}
+				)
+			)
 		);
 		ret &= add_condition(
 			StringUtils::append_string_views(identifier, "_strata_life_needs"),
 			_parse_condition_node_value_callback<fixed_point_t, COUNTRY | PROVINCE>,
-			_execute_condition_node_unimplemented
+			_execute_condition_node_cast_argument_callback<fixed_point_t, scope_t, scope_t, scope_t>(
+				[&strata](
+					Condition const& condition, InstanceManager const& instance_manager, scope_t current_scope,
+					scope_t this_scope, scope_t from_scope, fixed_point_t argument
+				) -> bool {
+					struct visitor_t {
+
+						Condition const& condition;
+						fixed_point_t const& argument;
+						Strata const& strata;
+
+						bool operator()(no_scope_t no_scope) const {
+							Logger::error("Error executing condition \"", condition.get_identifier(), "\": no current scope!");
+							return false;
+						}
+
+						constexpr bool operator()(CountryInstance const* country) const {
+							return country->get_strata_life_needs_fulfilled(strata) >= argument;
+						}
+						constexpr bool operator()(State const* state) const {
+							return state->get_strata_life_needs_fulfilled(strata) >= argument;
+						}
+						constexpr bool operator()(ProvinceInstance const* province) const {
+							return province->get_strata_life_needs_fulfilled(strata) >= argument;
+						}
+						constexpr bool operator()(Pop const* pop) const {
+							return (
+								&pop->get_type()->get_strata() == &strata ? pop->get_life_needs_fulfilled() :
+									fixed_point_t::_0()
+							) >= argument;
+						}
+					};
+
+					return std::visit(visitor_t { condition, argument, strata }, current_scope);
+				}
+			)
 		);
 		ret &= add_condition(
 			StringUtils::append_string_views(identifier, "_strata_everyday_needs"),
 			_parse_condition_node_value_callback<fixed_point_t, COUNTRY | PROVINCE>,
-			_execute_condition_node_unimplemented
+			_execute_condition_node_cast_argument_callback<fixed_point_t, scope_t, scope_t, scope_t>(
+				[&strata](
+					Condition const& condition, InstanceManager const& instance_manager, scope_t current_scope,
+					scope_t this_scope, scope_t from_scope, fixed_point_t argument
+				) -> bool {
+					struct visitor_t {
+
+						Condition const& condition;
+						fixed_point_t const& argument;
+						Strata const& strata;
+
+						bool operator()(no_scope_t no_scope) const {
+							Logger::error("Error executing condition \"", condition.get_identifier(), "\": no current scope!");
+							return false;
+						}
+
+						constexpr bool operator()(CountryInstance const* country) const {
+							return country->get_strata_everyday_needs_fulfilled(strata) >= argument;
+						}
+						constexpr bool operator()(State const* state) const {
+							return state->get_strata_everyday_needs_fulfilled(strata) >= argument;
+						}
+						constexpr bool operator()(ProvinceInstance const* province) const {
+							return province->get_strata_everyday_needs_fulfilled(strata) >= argument;
+						}
+						constexpr bool operator()(Pop const* pop) const {
+							return (
+								&pop->get_type()->get_strata() == &strata ? pop->get_everyday_needs_fulfilled() :
+									fixed_point_t::_0()
+							) >= argument;
+						}
+					};
+
+					return std::visit(visitor_t { condition, argument, strata }, current_scope);
+				}
+			)
 		);
 		ret &= add_condition(
 			StringUtils::append_string_views(identifier, "_strata_luxury_needs"),
 			_parse_condition_node_value_callback<fixed_point_t, COUNTRY | PROVINCE>,
-			_execute_condition_node_unimplemented
+			_execute_condition_node_cast_argument_callback<fixed_point_t, scope_t, scope_t, scope_t>(
+				[&strata](
+					Condition const& condition, InstanceManager const& instance_manager, scope_t current_scope,
+					scope_t this_scope, scope_t from_scope, fixed_point_t argument
+				) -> bool {
+					struct visitor_t {
+
+						Condition const& condition;
+						fixed_point_t const& argument;
+						Strata const& strata;
+
+						bool operator()(no_scope_t no_scope) const {
+							Logger::error("Error executing condition \"", condition.get_identifier(), "\": no current scope!");
+							return false;
+						}
+
+						constexpr bool operator()(CountryInstance const* country) const {
+							return country->get_strata_luxury_needs_fulfilled(strata) >= argument;
+						}
+						constexpr bool operator()(State const* state) const {
+							return state->get_strata_luxury_needs_fulfilled(strata) >= argument;
+						}
+						constexpr bool operator()(ProvinceInstance const* province) const {
+							return province->get_strata_luxury_needs_fulfilled(strata) >= argument;
+						}
+						constexpr bool operator()(Pop const* pop) const {
+							return (
+								&pop->get_type()->get_strata() == &strata ? pop->get_luxury_needs_fulfilled() :
+									fixed_point_t::_0()
+							) >= argument;
+						}
+					};
+
+					return std::visit(visitor_t { condition, argument, strata }, current_scope);
+				}
+			)
 		);
 		ret &= add_condition(
 			StringUtils::append_string_views(identifier, "_strata_militancy"),
 			_parse_condition_node_value_callback<fixed_point_t, COUNTRY>,
-			_execute_condition_node_unimplemented
+			_execute_condition_node_cast_argument_callback<fixed_point_t, scope_t, scope_t, scope_t>(
+				[&strata](
+					Condition const& condition, InstanceManager const& instance_manager, scope_t current_scope,
+					scope_t this_scope, scope_t from_scope, fixed_point_t argument
+				) -> bool {
+					struct visitor_t {
+
+						Condition const& condition;
+						fixed_point_t const& argument;
+						Strata const& strata;
+
+						bool operator()(no_scope_t no_scope) const {
+							Logger::error("Error executing condition \"", condition.get_identifier(), "\": no current scope!");
+							return false;
+						}
+
+						constexpr bool operator()(CountryInstance const* country) const {
+							return country->get_strata_militancy(strata) >= argument;
+						}
+						constexpr bool operator()(State const* state) const {
+							return state->get_strata_militancy(strata) >= argument;
+						}
+						constexpr bool operator()(ProvinceInstance const* province) const {
+							return province->get_strata_militancy(strata) >= argument;
+						}
+						constexpr bool operator()(Pop const* pop) const {
+							return (
+								&pop->get_type()->get_strata() == &strata ? pop->get_militancy() : fixed_point_t::_0()
+							) >= argument;
+						}
+					};
+
+					return std::visit(visitor_t { condition, argument, strata }, current_scope);
+				}
+			)
 		);
 	}
 

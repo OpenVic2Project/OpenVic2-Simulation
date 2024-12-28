@@ -44,7 +44,7 @@ void InstanceManager::update_gamestate() {
 	Logger::info("Update: ", today);
 	update_modifier_sums();
 	// Update gamestate...
-	map_instance.update_gamestate(today, definition_manager.get_define_manager());
+	map_instance.update_gamestate(*this);
 	country_instance_manager.update_gamestate(*this);
 
 	gamestate_updated();
@@ -152,10 +152,7 @@ bool InstanceManager::load_bookmark(Bookmark const* new_bookmark) {
 
 	if (ret) {
 		update_modifier_sums();
-		map_instance.initialise_for_new_game(
-			today,
-			definition_manager.get_define_manager()
-		);
+		map_instance.initialise_for_new_game(*this);
 		market_instance.execute_orders();
 	}
 
