@@ -534,6 +534,10 @@ static bool _parse_condition_node_value_callback(
 		ret = definition_manager.get_politics_manager().get_issue_manager().expect_reform_identifier_or_string(
 			assign_variable_callback_pointer(value)
 		)(node);
+	} else if constexpr (std::same_as<T, NationalValue const*>) {
+		ret = definition_manager.get_politics_manager().get_national_value_manager().expect_national_value_identifier_or_string(
+			assign_variable_callback_pointer(value)
+		)(node);
 	} else if constexpr (std::same_as<T, Invention const*>) {
 		ret = definition_manager.get_research_manager().get_invention_manager().expect_invention_identifier_or_string(
 			assign_variable_callback_pointer(value)
@@ -589,6 +593,9 @@ static bool _parse_condition_node_value_callback(
 			"which", ONE_EXACTLY, expect_identifier_or_string(assign_variable_callback_string(value.first)),
 			"value", ONE_EXACTLY, expect_fixed_point(assign_variable_callback(value.second))
 		)(node);
+	} else {
+		Logger::error("Cannot parse condition \"", condition.get_identifier(), "\": unknown value type!");
+		ret = false;
 	}
 
 	if (ret) {

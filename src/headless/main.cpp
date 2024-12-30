@@ -129,6 +129,39 @@ static bool run_headless(Dataloader::path_vector_t const& roots, bool run_tests)
 	// 	ret = false;
 	// }
 
+	Pop const& pop = *game_manager.get_instance_manager()->get_map_instance().get_province_instance_by_index(300)->get_pops().begin();
+
+	Logger::info(
+		"Pop has type ", pop.get_type()->get_identifier(),
+		", size ", pop.get_size(),
+		", culture ", pop.get_culture().get_identifier(),
+		", religion ", pop.get_religion().get_identifier(),
+		", ideology:"
+	);
+	for (auto [ideology, support] : pop.get_ideology_distribution()) {
+		Logger::info("    ", ideology.get_identifier(), " - ", support);
+	}
+
+	ProvinceInstance const& province = *pop.get_location();
+	Logger::info("Province ", province.get_identifier(), " has ", province.get_total_population(), " pops with ideology:");
+	for (auto [ideology, support] : province.get_ideology_distribution()) {
+		Logger::info("    ", ideology.get_identifier(), " - ", support);
+	}
+
+	State const& state = *province.get_state();
+	Logger::info("State ", state.get_identifier(), " has ", state.get_total_population(), " pops with ideology:");
+	for (auto [ideology, support] : state.get_ideology_distribution()) {
+		Logger::info("    ", ideology.get_identifier(), " - ", support);
+	}
+
+	CountryInstance const& country = *state.get_owner();
+	Logger::info("Country ", country.get_identifier(), " has ", country.get_total_population(), " pops with ideology:");
+	for (auto [ideology, support] : country.get_ideology_distribution()) {
+		Logger::info("    ", ideology.get_identifier(), " - ", support);
+	}
+
+	Logger::info("National value of ", country.get_identifier(), " is ", country.get_national_value());
+
 	return ret;
 }
 
