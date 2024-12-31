@@ -1967,20 +1967,19 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 	);
 	ret &= add_condition(
 		"check_variable",
-		/* TODO - complex:
-		 *  - does this have any scope restrictions, and does it affect scope in any way? The wiki warns that this doesn't
-		 *    work from province scope.
-		 *  - value is a dictionary with two entries:
-		 *    - which = <name>
-		 *      - the name of the variable being checked, similar to the name of a global/country/province flag
-		 *      - do flags and variables interact in any way? what happens if you create a flag and variable with the same name?
-		 *      - are variables global or per country/province?
-		 *    - value = <number>
-		 *      - The number to compare the current variable value against. Returns true if the variable has been previously
-		 *        set and has a value greater than or equal to the number.
-		 *      - Can values be negative? Can they be non-integers? How big can they get? */
 		_parse_condition_node_value_callback<std::pair<std::string, fixed_point_t>, COUNTRY>,
-		_execute_condition_node_unimplemented
+		_execute_condition_node_cast_argument_callback<std::pair<std::string, fixed_point_t>, scope_t, scope_t, scope_t>(
+			_execute_condition_node_convert_scope<
+				CountryInstance, scope_t, scope_t, std::pair<std::string, fixed_point_t> const&
+			>(
+				[](
+					Condition const& condition, InstanceManager const& instance_manager, CountryInstance const* current_scope,
+					scope_t this_scope, scope_t from_scope, std::pair<std::string, fixed_point_t> const& argument
+				) -> bool {
+					return current_scope->get_script_variable(argument.first) >= argument.second;
+				}
+			)
+		)
 	);
 	ret &= add_condition(
 		"civilization_progress",
@@ -2330,7 +2329,8 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 						return country->get_primary_culture();
 					}
 					constexpr Culture const* operator()(State const* state) const {
-						return (*this)(state->get_owner());
+						CountryInstance const* owner = state->get_owner();
+						return owner != nullptr ? (*this)(owner) : nullptr;
 					}
 					constexpr Culture const* operator()(ProvinceInstance const* province) const {
 						CountryInstance const* owner = province->get_owner();
@@ -2395,7 +2395,8 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 						return country->get_religion();
 					}
 					constexpr Religion const* operator()(State const* state) const {
-						return (*this)(state->get_owner());
+						CountryInstance const* owner = state->get_owner();
+						return owner != nullptr ? (*this)(owner) : nullptr;
 					}
 					constexpr Religion const* operator()(ProvinceInstance const* province) const {
 						CountryInstance const* owner = province->get_owner();
@@ -2838,7 +2839,40 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 	ret &= add_condition(
 		"money",
 		_parse_condition_node_value_callback<fixed_point_t, COUNTRY | POP>,
-		_execute_condition_node_unimplemented
+		_execute_condition_node_cast_argument_callback<fixed_point_t, scope_t, scope_t, scope_t>(
+			[](
+				Condition const& condition, InstanceManager const& instance_manager, scope_t current_scope, scope_t this_scope,
+				scope_t from_scope, fixed_point_t argument
+			) -> bool {
+				struct visitor_t {
+
+					Condition const& condition;
+					fixed_point_t const& argument;
+
+					bool operator()(no_scope_t no_scope) const {
+						Logger::error("Error executing condition \"", condition.get_identifier(), "\": no current scope!");
+						return false;
+					}
+
+					constexpr bool operator()(CountryInstance const* country) const {
+						return country->get_cash_stockpile() >= argument;
+					}
+					constexpr bool operator()(State const* state) const {
+						CountryInstance const* owner = state->get_owner();
+						return owner != nullptr && (*this)(owner);
+					}
+					constexpr bool operator()(ProvinceInstance const* province) const {
+						CountryInstance const* owner = province->get_owner();
+						return owner != nullptr && (*this)(owner);
+					}
+					constexpr bool operator()(Pop const* pop) const {
+						return pop->get_cash() >= argument;
+					}
+				};
+
+				return std::visit(visitor_t { condition, argument }, current_scope);
+			}
+		)
 	);
 	ret &= add_condition(
 		"nationalvalue",
