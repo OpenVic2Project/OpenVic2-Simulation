@@ -49,6 +49,11 @@ namespace OpenVic {
 
 		enum struct colony_status_t : uint8_t { STATE, PROTECTORATE, COLONY };
 
+		// This combines COLONY and PROTECTORATE statuses, as opposed to non-colonial STATE provinces
+		static constexpr bool is_colonial(colony_status_t colony_status) {
+			return colony_status != colony_status_t::STATE;
+		}
+
 		static constexpr std::string_view get_colony_status_string(colony_status_t colony_status) {
 			using enum colony_status_t;
 			switch (colony_status) {
@@ -162,9 +167,8 @@ namespace OpenVic {
 		constexpr bool is_owner_core() const {
 			return owner != nullptr && cores.contains(owner);
 		}
-		// This combines COLONY and PROTECTORATE statuses, as opposed to non-colonial STATE provinces
 		constexpr bool is_colonial_province() const {
-			return colony_status != colony_status_t::STATE;
+			return is_colonial(colony_status);
 		}
 
 		// The values returned by these functions are scaled by population size, so they must be divided by population size

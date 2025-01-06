@@ -35,6 +35,18 @@ namespace OpenVic {
 		using _UnitInstance = UnitInstanceBranched<Branch>;
 		using _Leader = LeaderBranched<Branch>;
 
+		static constexpr std::string_view get_group_branch_string() {
+			using enum UnitType::branch_t;
+			switch (Branch) {
+			case LAND:
+				return "army";
+			case NAVAL:
+				return "navy";
+			default:
+				return "invalid unit group branch";
+			}
+		}
+
 	private:
 		std::string PROPERTY(name);
 		std::vector<_UnitInstance*> PROPERTY(units);

@@ -1450,7 +1450,7 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 	);
 	ret &= add_condition(
 		"any_state",
-		_parse_condition_node_list_callback<PROVINCE, COUNTRY>,
+		_parse_condition_node_list_callback<STATE, COUNTRY>,
 		_execute_condition_node_convert_scope<CountryInstance, scope_t, scope_t, argument_t const&>(
 			_execute_condition_node_list_multi_scope_callback<
 				expect_true, require_any, ordered_set<State*> const&, CountryInstance const*
@@ -1589,7 +1589,7 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 	);
 	ret &= add_condition(
 		"state_scope",
-		_parse_condition_node_list_callback<PROVINCE, PROVINCE>,
+		_parse_condition_node_list_callback<STATE, PROVINCE>,
 		_execute_condition_node_convert_scope<ProvinceInstance, scope_t, scope_t, argument_t const&>(
 			_execute_condition_node_list_single_scope_callback<expect_true, require_all, ProvinceInstance const*>(
 				[](
@@ -1686,16 +1686,14 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 	ret &= add_condition(
 		"has_global_flag",
 		_parse_condition_node_value_callback<std::string>,
-		_execute_condition_node_unimplemented
-		/*_execute_condition_node_cast_argument_callback<std::string, scope_t, scope_t, scope_t>(
+		_execute_condition_node_cast_argument_callback<std::string, scope_t, scope_t, scope_t>(
 			[](
 				Condition const& condition, InstanceManager const& instance_manager, scope_t current_scope, scope_t this_scope,
 				scope_t from_scope, std::string const& argument
 			) -> bool {
-				// TODO - check if global flag "argument" is set
-				return false;
+				return instance_manager.get_global_flags().has_flag(argument);
 			}
-		)*/
+		)
 	);
 	ret &= add_condition(
 		"is_canal_enabled",
@@ -2160,6 +2158,11 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 		 * has_pop_culture should be used to check a specific pop's culture. The tooltips aren't very clear, with
 		 * "culture = <culture>" showing up as "Culture is <culture>" and "has_pop_culture = <culture>" showing up as
 		 * "<Pop type plural> in <province> have <culture>". */
+		/* Possible explanation:
+		 *  - get to PROVINCE scope (ideally starting from a scope <= PROVINCE, so PROVINCE (-> itself) or POP (-> location))
+		 *  - convert arg to Culture const*: it'll either be a culture identifier (and so already a Culture const* from its
+		 *    parsing), or THIS or FROM ()
+		 * */
 		_parse_condition_node_value_callback<Culture const*, PROVINCE | POP | THIS | FROM>,
 		_execute_condition_node_unimplemented
 	);
@@ -2577,18 +2580,26 @@ bool ConditionManager::setup_conditions(DefinitionManager const& definition_mana
 	);
 	ret &= add_condition(
 		"is_colonial",
-		_parse_condition_node_value_callback<bool, PROVINCE>,
+		_parse_condition_node_value_callback<bool, STATE | PROVINCE>,
 		_execute_condition_node_cast_argument_callback<bool, scope_t, scope_t, scope_t>(
-			_execute_condition_node_convert_scope<ProvinceInstance, scope_t, scope_t, bool>(
+			_execute_condition_node_convert_scope<State, scope_t, scope_t, bool>(
 				[](
-					Condition const& condition, InstanceManager const& instance_manager, ProvinceInstance const* current_scope,
+					Condition const& condition, InstanceManager const& instance_manager, State const* current_scope,
 					scope_t this_scope, scope_t from_scope, bool argument
 				) -> bool {
-					using enum ProvinceInstance::colony_status_t;
+					/* TODO - ensure province colony status is set properly (default state for owned provinces, default colony
+					 *        for unowned) and that every province belongs to a state (land provinces at least, water provinces
+					 *        might need special handling) and that all provinces in each state share its colony status
+					 *        (we may need to create multiple states for a single country in a single region if it somehow has
+					 *        a mismatch of colony statuses and maybe slave statuses too). These same issues apply to other
+					 *        conditions mixing corresponding variables at province and state scopes.
+					 *      - we could also convert, to Province scope rather than State scope here, however that would force
+					 *        State scope uses of this condition to begin a loop over all its provinces (admittedly exiting
+					 *        after the first in the true-result case, but needing to go through every one of the state's
+					 *        provinces in the false-result case despite it being certain that all of the provinces being
+					 *        looped over must have the same colony status (as they're in the same State). */
 
-					// TODO - ensure province colony status is set properly (default state for owned provinces, default colony for unowned)
-
-					return current_scope->get_colony_status() != STATE;
+					return current_scope->is_colonial_state() == argument;
 				}
 			)
 		)

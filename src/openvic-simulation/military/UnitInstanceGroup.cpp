@@ -44,6 +44,7 @@ size_t UnitInstanceGroup<Branch>::get_unit_category_count(UnitType::unit_categor
 template<UnitType::branch_t Branch>
 UnitType const* UnitInstanceGroup<Branch>::get_display_unit_type() const {
 	if (units.empty()) {
+		Logger::error("Unit group ", name, " has no units!");
 		return nullptr;
 	}
 

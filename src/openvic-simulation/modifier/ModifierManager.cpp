@@ -149,7 +149,7 @@ bool ModifierManager::setup_modifier_effects() {
 	);
 	ret &= register_technology_modifier_effect(modifier_effect_cache.artisan_input, "artisan_input", false, PROPORTION_DECIMAL,{},has_no_effect);
 	ret &= register_technology_modifier_effect(modifier_effect_cache.artisan_output, "artisan_output", true, PROPORTION_DECIMAL,{},has_no_effect);
-	ret &= register_technology_modifier_effect(	modifier_effect_cache.artisan_throughput, "artisan_throughput", true, PROPORTION_DECIMAL,{},has_no_effect);
+	ret &= register_technology_modifier_effect(modifier_effect_cache.artisan_throughput, "artisan_throughput", true, PROPORTION_DECIMAL,{},has_no_effect);
 	ret &= register_base_country_modifier_effect(modifier_effect_cache.badboy, "badboy", false, RAW_DECIMAL);
 	ret &= register_base_country_modifier_effect(
 		modifier_effect_cache.cb_generation_speed_modifier, "cb_generation_speed_modifier", true, PROPORTION_DECIMAL
@@ -342,7 +342,7 @@ bool ModifierManager::setup_modifier_effects() {
 		modifier_effect_cache.political_reform_desire, "political_reform_desire", false, PROPORTION_DECIMAL
 	);
 
-	ret &= register_technology_modifier_effect(	modifier_effect_cache.poor_savings_modifier, "poor_savings_modifier", true, PROPORTION_DECIMAL,{},has_no_effect);
+	ret &= register_technology_modifier_effect(modifier_effect_cache.poor_savings_modifier, "poor_savings_modifier", true, PROPORTION_DECIMAL,{},has_no_effect);
 	ret &= register_base_country_modifier_effect(
 		modifier_effect_cache.prestige_monthly_gain, "prestige", true, RAW_DECIMAL
 	);

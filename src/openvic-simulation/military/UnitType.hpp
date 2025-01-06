@@ -23,6 +23,18 @@ namespace OpenVic {
 		using terrain_modifiers_t = ordered_map<TerrainType const*, Modifier>;
 
 		enum struct branch_t : uint8_t { INVALID_BRANCH, LAND, NAVAL };
+		static constexpr std::string_view get_branch_string(branch_t branch) {
+			using enum branch_t;
+			switch (branch) {
+			case LAND:
+				return "land";
+			case NAVAL:
+				return "naval";
+			default:
+				return "invalid branch";
+			}
+		}
+
 		enum struct unit_category_t : uint8_t {
 			INVALID_UNIT_CATEGORY, INFANTRY, CAVALRY, SUPPORT, SPECIAL, BIG_SHIP, LIGHT_SHIP, TRANSPORT
 		};
