@@ -13,6 +13,8 @@ namespace OpenVic {
 	struct UnitInstance {
 		using _UnitType = UnitTypeBranched<Branch>;
 
+		
+
 	private:
 		std::string PROPERTY(unit_name);
 		_UnitType const& PROPERTY(unit_type);
