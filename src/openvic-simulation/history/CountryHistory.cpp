@@ -2,6 +2,7 @@
 
 #include "openvic-simulation/country/CountryDefinition.hpp"
 #include "openvic-simulation/DefinitionManager.hpp"
+#include "dataloader/NodeTools.hpp"
 
 using namespace OpenVic;
 using namespace OpenVic::NodeTools;
@@ -135,7 +136,16 @@ bool CountryHistoryMap::_load_history_entry(
 		),
 		"civilized", ZERO_OR_ONE, expect_bool(assign_variable_callback(entry.civilised)),
 		"prestige", ZERO_OR_ONE, expect_fixed_point(assign_variable_callback(entry.prestige)),
-		"ruling_party", ZERO_OR_ONE, country.expect_party_identifier(assign_variable_callback_pointer_opt(entry.ruling_party)),
+		"ruling_party", ZERO_OR_ONE, [this, &entry](ast::NodeCPtr value) -> bool { // theres this awesome thing where vic2 doesn't really care if the party you put here doesn't exist, and DoD uses that for whatever reason. To maintain compatibility, I've assigned the first defined party if the party assigned by ruling_party isn't real and warned about it in the log - brickpi
+			country.expect_party_identifier(assign_variable_callback_pointer_opt(entry.ruling_party), true)(value);
+			if (!entry.ruling_party.has_value()) {
+				entry.ruling_party = &country.get_front_party();
+				std::string_view def {};
+				expect_identifier(assign_variable_callback(def))(value);
+				Logger::warning("In ", country.get_identifier(), " history: ruling_party ", def, " does NOT exist! Using ", country.get_front_party().get_identifier(), " instead.");
+			}
+			return true;
+		},
 		"last_election", ZERO_OR_ONE, expect_date(assign_variable_callback(entry.last_election)),
 		"upper_house", ZERO_OR_ONE, politics_manager.get_ideology_manager().expect_ideology_dictionary(
 			[&entry](Ideology const& ideology, ast::NodeCPtr value) -> bool {
@@ -163,7 +173,7 @@ bool CountryHistoryMap::_load_history_entry(
 		"consciousness", ZERO_OR_ONE, expect_fixed_point(assign_variable_callback(entry.consciousness)),
 		"nonstate_consciousness", ZERO_OR_ONE, expect_fixed_point(assign_variable_callback(entry.nonstate_consciousness)),
 		"is_releasable_vassal", ZERO_OR_ONE, expect_bool(assign_variable_callback(entry.releasable_vassal)),
-		"decision", ZERO_OR_MORE, decision_manager.expect_decision_identifier(set_callback_pointer(entry.decisions)),
+		"decision", ZERO_OR_MORE, decision_manager.expect_decision_identifier(set_callback_pointer(entry.decisions), true), // if a mod lists an invalid decision here (as some hpm-derived mods that remove hpm decisions do) vic2 just ignores it.
 		"govt_flag", ZERO_OR_MORE, [&entry, &politics_manager](ast::NodeCPtr value) -> bool {
 			GovernmentTypeManager const& government_type_manager = politics_manager.get_government_type_manager();
 			GovernmentType const* government_type = nullptr;

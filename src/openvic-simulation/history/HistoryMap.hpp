@@ -66,8 +66,7 @@ namespace OpenVic {
 			const Date sub_date { Date::from_string(key, &is_date, true) };
 			if (is_date) {
 				if (sub_date < date) {
-					Logger::error("History entry ", sub_date, " defined before parent entry date ", date);
-					return false;
+					Logger::warning("History entry ", sub_date, " defined before parent entry date ", date);
 				}
 				if (sub_date == date) {
 					Logger::warning("History entry ", sub_date, " defined with same date as parent entry");

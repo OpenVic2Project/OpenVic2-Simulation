@@ -151,15 +151,16 @@ bool ModifierManager::setup_modifier_effects() {
 		modifier_effect_cache.administrative_efficiency_modifier, "administrative_efficiency_modifier", true,
 		PROPORTION_DECIMAL, ModifierEffect::make_default_modifier_effect_localisation_key("administrative_efficiency")
 	);
-	ret &= register_technology_modifier_effect(
+	ret &= register_base_country_modifier_effect(
 		modifier_effect_cache.artisan_input, "artisan_input", false, PROPORTION_DECIMAL, {}, has_no_effect
 	);
-	ret &= register_technology_modifier_effect(
+	ret &= register_base_country_modifier_effect(
 		modifier_effect_cache.artisan_output, "artisan_output", true, PROPORTION_DECIMAL, {}, has_no_effect
 	);
-	ret &= register_technology_modifier_effect(
+	ret &= register_base_country_modifier_effect(
 		modifier_effect_cache.artisan_throughput, "artisan_throughput", true, PROPORTION_DECIMAL, {}, has_no_effect
 	);
+	ret &= register_base_country_modifier_effect(modifier_effect_cache.assimilation_rate_g, "assimilation_rate", true, PROPORTION_DECIMAL, {}, has_no_effect),
 	ret &= register_base_country_modifier_effect(modifier_effect_cache.badboy, "badboy", false, RAW_DECIMAL);
 	ret &= register_base_country_modifier_effect(
 		modifier_effect_cache.cb_generation_speed_modifier, "cb_generation_speed_modifier", true, PROPORTION_DECIMAL
@@ -263,8 +264,11 @@ bool ModifierManager::setup_modifier_effects() {
 		modifier_effect_cache.land_attack_modifier, "land_attack_modifier", true, PROPORTION_DECIMAL,
 		ModifierEffect::make_default_modifier_effect_localisation_key("land_attack")
 	);
+	ret &= register_base_country_modifier_effect( // both of these are used and work
+		modifier_effect_cache.land_attrition_country, "land_attrition", false, PROPORTION_DECIMAL, "LAND_ATTRITION_TECH"
+	);
 	ret &= register_technology_modifier_effect(
-		modifier_effect_cache.land_attrition, "land_attrition", false, PROPORTION_DECIMAL, "LAND_ATTRITION_TECH"
+		modifier_effect_cache.land_attrition_tech, "land_attrition", false, PROPORTION_DECIMAL, "LAND_ATTRITION_TECH"
 	);
 	ret &= register_base_country_modifier_effect(
 		modifier_effect_cache.land_defense_modifier, "land_defense_modifier", true, PROPORTION_DECIMAL,
@@ -443,6 +447,10 @@ bool ModifierManager::setup_modifier_effects() {
 	ret &= register_base_country_modifier_effect(
 		modifier_effect_cache.unit_recruitment_time, "unit_recruitment_time", false, PROPORTION_DECIMAL
 	);
+	ret &= register_base_country_modifier_effect(
+		modifier_effect_cache.unit_start_experience, "unit_start_experience", true, PROPORTION_DECIMAL,
+		ModifierEffect::make_default_modifier_effect_localisation_key("unit_start_experience")
+	); // combined with LAND_ or NAVAL_ I'd assume. Seems to be a remnant left over from pre-AHD *shudders*
 	ret &= register_shared_tech_country_modifier_effect(
 		modifier_effect_cache.war_exhaustion, "war_exhaustion", false, RAW_DECIMAL, "WAR_EXHAUST_BATTLES"
 	);

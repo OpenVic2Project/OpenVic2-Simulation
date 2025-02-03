@@ -50,6 +50,7 @@ namespace OpenVic {
 		ModifierEffect const* PROPERTY(artisan_input);
 		ModifierEffect const* PROPERTY(artisan_output);
 		ModifierEffect const* PROPERTY(artisan_throughput);
+		ModifierEffect const* PROPERTY(assimilation_rate_g);
 		ModifierEffect const* PROPERTY(badboy);
 		ModifierEffect const* PROPERTY(cb_generation_speed_modifier);
 		ModifierEffect const* PROPERTY(civilization_progress_modifier);
@@ -82,7 +83,8 @@ namespace OpenVic {
 		ModifierEffect const* PROPERTY(influence_modifier);
 		ModifierEffect const* PROPERTY(issue_change_speed);
 		ModifierEffect const* PROPERTY(land_attack_modifier);
-		ModifierEffect const* PROPERTY(land_attrition);
+		ModifierEffect const* PROPERTY(land_attrition_country);
+		ModifierEffect const* PROPERTY(land_attrition_tech);
 		ModifierEffect const* PROPERTY(land_defense_modifier);
 		ModifierEffect const* PROPERTY(land_organisation);
 		ModifierEffect const* PROPERTY(land_unit_start_experience);
@@ -141,6 +143,7 @@ namespace OpenVic {
 		ModifierEffect const* PROPERTY(unciv_economic_modifier);
 		ModifierEffect const* PROPERTY(unciv_military_modifier);
 		ModifierEffect const* PROPERTY(unit_recruitment_time);
+		ModifierEffect const* PROPERTY(unit_start_experience);
 		ModifierEffect const* PROPERTY(war_exhaustion);
 
 		/* Province Modifier Effects */
@@ -321,6 +324,7 @@ namespace OpenVic {
 			ModifierEffect const* PROPERTY(life_needs);
 			ModifierEffect const* PROPERTY(everyday_needs);
 			ModifierEffect const* PROPERTY(luxury_needs);
+			ModifierEffect const* PROPERTY(savings); // used by HPM, PDM, TGC, etc, and has localisation in vanilla but never used in vanilla. not entirely sure what it does either. -brickpi
 
 		public:
 			strata_effects_t();
