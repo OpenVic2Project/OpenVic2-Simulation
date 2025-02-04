@@ -25,6 +25,7 @@ static constexpr colour_t ERROR_COLOUR = colour_t::from_integer(0xFF0000);
 
 CountryInstance::CountryInstance(
 	CountryDefinition const* new_country_definition,
+			index_t new_index,
 	decltype(building_type_unlock_levels)::keys_type const& building_type_keys,
 	decltype(technology_unlock_levels)::keys_type const& technology_keys,
 	decltype(invention_unlock_levels)::keys_type const& invention_keys,
@@ -39,6 +40,7 @@ CountryInstance::CountryInstance(
 	decltype(tax_rate_by_strata)::keys_type const& strata_keys,
 	GoodInstanceManager& good_instance_manager
 ) : FlagStrings { "country" },
+	HasIndex { new_index },
 	/* Main attributes */
 	country_definition { new_country_definition },
 	colour { ERROR_COLOUR },
@@ -114,6 +116,11 @@ std::string_view CountryInstance::get_identifier() const {
 
 void CountryInstance::update_country_definition_based_attributes() {
 	vote_distribution.set_keys(&country_definition->get_parties());
+}
+
+void CountryInstance::set_ai(bool new_ai) {
+	// TODO - setup AI internal state
+	ai = new_ai;
 }
 
 bool CountryInstance::exists() const {
@@ -317,74 +324,124 @@ void CountryInstance::change_war_exhaustion(fixed_point_t delta) {
 	war_exhaustion = std::clamp(war_exhaustion + delta, fixed_point_t::_0(), war_exhaustion_max);
 }
 
-template<UnitType::branch_t Branch>
-bool CountryInstance::add_unit_instance_group(UnitInstanceGroup<Branch>& group) {
-	if (get_unit_instance_groups<Branch>().emplace(static_cast<UnitInstanceGroupBranched<Branch>*>(&group)).second) {
+bool CountryInstance::add_unit_instance_group(UnitInstanceGroup& group) {
+	using enum UnitType::branch_t;
+
+	switch (group.get_branch()) {
+	case LAND:
+		armies.push_back(static_cast<ArmyInstance*>(&group));
 		return true;
-	} else {
+	case NAVAL:
+		navies.push_back(static_cast<NavyInstance*>(&group));
+		return true;
+	default:
 		Logger::error(
-			"Trying to add already-existing ", UnitType::get_branched_unit_group_name(Branch), " \"",
-			group.get_name(), "\" to country ", get_identifier()
+			"Trying to add unit group \"", group.get_name(), "\" with invalid branch ",
+			static_cast<uint32_t>(group.get_branch()), " to country ", get_identifier()
 		);
 		return false;
 	}
 }
 
-template<UnitType::branch_t Branch>
-bool CountryInstance::remove_unit_instance_group(UnitInstanceGroup<Branch> const& group) {
-	if (get_unit_instance_groups<Branch>().erase(static_cast<UnitInstanceGroupBranched<Branch> const*>(&group)) > 0) {
-		return true;
-	} else {
+bool CountryInstance::remove_unit_instance_group(UnitInstanceGroup const& group) {
+	const auto remove_from_vector = [this, &group]<UnitType::branch_t Branch>(
+		std::vector<UnitInstanceGroupBranched<Branch>*>& unit_instance_groups
+	) -> bool {
+		const typename std::vector<UnitInstanceGroupBranched<Branch>*>::const_iterator it =
+			std::find(unit_instance_groups.begin(), unit_instance_groups.end(), &group);
+
+		if (it != unit_instance_groups.end()) {
+			unit_instance_groups.erase(it);
+			return true;
+		} else {
+			Logger::error(
+				"Trying to remove non-existent ", UnitType::get_branched_unit_group_name(Branch), " \"",
+				group.get_name(), "\" from country ", get_identifier()
+			);
+			return false;
+		}
+	};
+
+	using enum UnitType::branch_t;
+
+	switch (group.get_branch()) {
+	case LAND:
+		return remove_from_vector(armies);
+	case NAVAL:
+		return remove_from_vector(navies);
+	default:
 		Logger::error(
-			"Trying to remove non-existent ", UnitType::get_branched_unit_group_name(Branch), " \"",
-			group.get_name(), "\" from country ", get_identifier()
+			"Trying to remove unit group \"", group.get_name(), "\" with invalid branch ",
+			static_cast<uint32_t>(group.get_branch()), " from country ", get_identifier()
 		);
 		return false;
 	}
 }
 
-template bool CountryInstance::add_unit_instance_group(UnitInstanceGroup<UnitType::branch_t::LAND>&);
-template bool CountryInstance::add_unit_instance_group(UnitInstanceGroup<UnitType::branch_t::NAVAL>&);
-template bool CountryInstance::remove_unit_instance_group(UnitInstanceGroup<UnitType::branch_t::LAND> const&);
-template bool CountryInstance::remove_unit_instance_group(UnitInstanceGroup<UnitType::branch_t::NAVAL> const&);
+bool CountryInstance::add_leader(LeaderInstance& leader) {
+	using enum UnitType::branch_t;
 
-template<UnitType::branch_t Branch>
-void CountryInstance::add_leader(LeaderBranched<Branch>&& leader) {
-	get_leaders<Branch>().emplace(std::move(leader));
+	switch (leader.get_branch()) {
+	case LAND:
+		generals.push_back(&leader);
+		return true;
+	case NAVAL:
+		admirals.push_back(&leader);
+		return true;
+	default:
+		Logger::error(
+			"Trying to add leader \"", leader.get_name(), "\" with invalid branch ",
+			static_cast<uint32_t>(leader.get_branch()), " to country ", get_identifier()
+		);
+		return false;
+	}
 }
 
-template<UnitType::branch_t Branch>
-bool CountryInstance::remove_leader(LeaderBranched<Branch> const& leader) {
-	plf::colony<LeaderBranched<Branch>>& leaders = get_leaders<Branch>();
-	const auto it = leaders.get_iterator(&leader);
-	if (it != leaders.end()) {
-		leaders.erase(it);
-		return true;
+bool CountryInstance::remove_leader(LeaderInstance const& leader) {
+	using enum UnitType::branch_t;
+
+	std::vector<LeaderInstance*>* leaders;
+
+	switch (leader.get_branch()) {
+	case LAND:
+		leaders = &generals;
+		break;
+	case NAVAL:
+		leaders = &admirals;
+		break;
+	default:
+		Logger::error(
+			"Trying to remove leader \"", leader.get_name(), "\" with invalid branch ",
+			static_cast<uint32_t>(leader.get_branch()), " from country ", get_identifier()
+		);
+		return false;
 	}
 
-	Logger::error(
-		"Trying to remove non-existent ", UnitType::get_branched_leader_name(Branch), " \"",
-		leader.get_name(), "\" from country ", get_identifier()
-	);
-	return false;
-}
+	const typename std::vector<LeaderInstance*>::const_iterator it = std::find(leaders->begin(), leaders->end(), &leader);
 
-template void CountryInstance::add_leader(LeaderBranched<UnitType::branch_t::LAND>&&);
-template void CountryInstance::add_leader(LeaderBranched<UnitType::branch_t::NAVAL>&&);
-template bool CountryInstance::remove_leader(LeaderBranched<UnitType::branch_t::LAND> const&);
-template bool CountryInstance::remove_leader(LeaderBranched<UnitType::branch_t::NAVAL> const&);
+	if (it != leaders->end()) {
+		leaders->erase(it);
+		return true;
+	} else {
+		Logger::error(
+			"Trying to remove non-existent ", UnitType::get_branched_leader_name(leader.get_branch()), " \"",
+			leader.get_name(), "\" from country ", get_identifier()
+		);
+		return false;
+	}
+}
 
 bool CountryInstance::has_leader_with_name(std::string_view name) const {
-	const auto check_leaders = [this, &name]<UnitType::branch_t Branch>() -> bool {
-		for (LeaderBranched<Branch> const& leader : get_leaders<Branch>()) {
-			if (leader.get_name() == name) {
+	const auto check_leaders = [&name](std::vector<LeaderInstance*> const& leaders) -> bool {
+		for (LeaderInstance const* leader : leaders) {
+			if (leader->get_name() == name) {
 				return true;
 			}
 		}
 		return false;
 	};
 
-	return check_leaders.operator()<UnitType::branch_t::LAND>() || check_leaders.operator()<UnitType::branch_t::NAVAL>();
+	return check_leaders(generals) || check_leaders(admirals);
 }
 
 template<UnitType::branch_t Branch>
@@ -1043,7 +1100,7 @@ void CountryInstance::_update_military(
 
 	size_t deployed_non_mobilised_regiments = 0;
 	for (ArmyInstance const* army : armies) {
-		for (RegimentInstance const* regiment : army->get_units()) {
+		for (RegimentInstance const* regiment : army->get_regiment_instances()) {
 			if (!regiment->is_mobilised()) {
 				deployed_non_mobilised_regiments++;
 			}
@@ -1076,8 +1133,8 @@ void CountryInstance::_update_military(
 
 	military_power_from_sea = 0;
 	for (NavyInstance const* navy : navies) {
-		for (ShipInstance const* ship : navy->get_units()) {
-			ShipType const& ship_type = ship->get_unit_type();
+		for (ShipInstance const* ship : navy->get_ship_instances()) {
+			ShipType const& ship_type = ship->get_ship_type();
 
 			if (ship_type.is_capital()) {
 
@@ -1517,14 +1574,15 @@ void CountryInstanceManager::update_rankings(Date today, DefineManager const& de
 }
 
 CountryInstanceManager::CountryInstanceManager(CountryDefinitionManager const& new_country_definition_manager)
-	: country_definition_manager { new_country_definition_manager } {}
+  : country_definition_manager { new_country_definition_manager },
+	country_definition_to_instance_map { &new_country_definition_manager.get_country_definitions() } {}
 
 CountryInstance& CountryInstanceManager::get_country_instance_from_definition(CountryDefinition const& country) {
-	return country_instances.get_items()[country.get_index()];
+	return *country_definition_to_instance_map[country];
 }
 
 CountryInstance const& CountryInstanceManager::get_country_instance_from_definition(CountryDefinition const& country) const {
-	return country_instances.get_items()[country.get_index()];
+	return *country_definition_to_instance_map[country];
 }
 
 bool CountryInstanceManager::generate_country_instances(
@@ -1549,6 +1607,7 @@ bool CountryInstanceManager::generate_country_instances(
 	for (CountryDefinition const& country_definition : country_definition_manager.get_country_definitions()) {
 		if (country_instances.add_item({
 			&country_definition,
+			get_country_instance_count(),
 			building_type_keys,
 			technology_keys,
 			invention_keys,
@@ -1567,6 +1626,8 @@ bool CountryInstanceManager::generate_country_instances(
 			// after changing between its constructor call and now due to being std::move'd into the registry.
 			CountryInstance& country_instance = get_back_country_instance();
 			country_instance.modifier_sum.set_this_source(&country_instance);
+
+			country_definition_to_instance_map[country_definition] = &country_instance;
 		} else {
 			ret = false;
 		}
