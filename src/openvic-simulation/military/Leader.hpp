@@ -13,10 +13,12 @@ namespace OpenVic {
 	using unique_id_t = uint64_t;
 
 	struct DeploymentManager;
+	struct UnitInstanceManager;
 	struct LeaderTrait;
 
 	struct LeaderBase {
 		friend struct DeploymentManager;
+		friend struct UnitInstanceManager;
 
 	private:
 		std::string PROPERTY(name);
@@ -53,7 +55,7 @@ namespace OpenVic {
 	private:
 		const unique_id_t PROPERTY(unique_id);
 		UnitInstanceGroup* PROPERTY_PTR(unit_instance_group, nullptr);
-		bool PROPERTY(can_be_used, true);
+		bool PROPERTY_RW(can_be_used, true);
 
 		LeaderInstance(unique_id_t new_unique_id, LeaderBase const& leader_base);
 	};

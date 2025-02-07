@@ -25,7 +25,7 @@ static constexpr colour_t ERROR_COLOUR = colour_t::from_integer(0xFF0000);
 
 CountryInstance::CountryInstance(
 	CountryDefinition const* new_country_definition,
-			index_t new_index,
+	index_t new_index,
 	decltype(building_type_unlock_levels)::keys_type const& building_type_keys,
 	decltype(technology_unlock_levels)::keys_type const& technology_keys,
 	decltype(invention_unlock_levels)::keys_type const& invention_keys,
@@ -1454,6 +1454,19 @@ void CountryInstance::report_rgo_output(GoodDefinition const& good, const fixed_
 	//TODO record rgo output
 }
 
+CountryInstance::good_data_t& CountryInstance::get_good_data(GoodInstance const& good_instance) {
+	return goods_data[good_instance];
+}
+CountryInstance::good_data_t const& CountryInstance::get_good_data(GoodInstance const& good_instance) const {
+	return goods_data[good_instance];
+}
+CountryInstance::good_data_t& CountryInstance::get_good_data(GoodDefinition const& good_definition) {
+	return goods_data[good_definition.get_index()];
+}
+CountryInstance::good_data_t const& CountryInstance::get_good_data(GoodDefinition const& good_definition) const {
+	return goods_data[good_definition.get_index()];
+}
+
 void CountryInstanceManager::update_rankings(Date today, DefineManager const& define_manager) {
 	total_ranking.clear();
 
@@ -1644,7 +1657,6 @@ bool CountryInstanceManager::apply_history_to_countries(
 	const Date today = instance_manager.get_today();
 	UnitInstanceManager& unit_instance_manager = instance_manager.get_unit_instance_manager();
 	MapInstance& map_instance = instance_manager.get_map_instance();
-	CultureManager const& culture_manager = instance_manager.get_definition_manager().get_pop_manager().get_culture_manager();
 
 	for (CountryInstance& country_instance : country_instances.get_items()) {
 		if (!country_instance.get_country_definition()->is_dynamic_tag()) {
@@ -1686,7 +1698,7 @@ bool CountryInstanceManager::apply_history_to_countries(
 
 				if (oob_history_entry != nullptr) {
 					ret &= unit_instance_manager.generate_deployment(
-						culture_manager, map_instance, country_instance, *oob_history_entry->get_inital_oob()
+						map_instance, country_instance, *oob_history_entry->get_inital_oob()
 					);
 				}
 

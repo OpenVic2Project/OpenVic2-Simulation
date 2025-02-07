@@ -63,6 +63,11 @@ InstanceManager::InstanceManager(
 	},
 	global_flags { "global" },
 	country_instance_manager { new_definition_manager.get_country_definition_manager() },
+	unit_instance_manager {
+		new_definition_manager.get_pop_manager().get_culture_manager(),
+		new_definition_manager.get_military_manager().get_leader_trait_manager(),
+		new_definition_manager.get_define_manager().get_military_defines()
+	},
 	politics_instance_manager { *this },
 	map_instance { new_definition_manager.get_map_definition() },
 	simulation_clock {
@@ -373,14 +378,14 @@ std::array<
 	// Population
 
 	// Trade
+	// GAME_ACTION_SET_GOOD_AUTOMATED
+	&InstanceManager::game_action_callback_set_good_automated,
 
 	// Diplomacy
 
 	// Military
-	// GAME_ACTION_CREATE_GENERAL
-	&InstanceManager::game_action_callback_create_general,
-	// GAME_ACTION_CREATE_ADMIRAL
-	&InstanceManager::game_action_callback_create_admiral,
+	// GAME_ACTION_CREATE_LEADER
+	&InstanceManager::game_action_callback_create_leader,
 	// GAME_ACTION_SET_USE_LEADER
 	&InstanceManager::game_action_callback_set_use_leader,
 	// GAME_ACTION_SET_AUTO_CREATE_LEADERS
@@ -720,20 +725,91 @@ bool InstanceManager::game_action_callback_start_research(game_action_argument_t
 // Population
 
 // Trade
+bool InstanceManager::game_action_callback_set_good_automated(game_action_argument_t const& argument) {
+	std::tuple<uint64_t, uint64_t, bool> const* country_good_automated =
+		std::get_if<std::tuple<uint64_t, uint64_t, bool>>(&argument);
+	if (OV_unlikely(country_good_automated == nullptr)) {
+		Logger::error("GAME_ACTION_SET_GOOD_AUTOMATED called with invalid argument: ", argument);
+		return false;
+	}
+
+	CountryInstance* country = country_instance_manager.get_country_instance_by_index(std::get<0>(*country_good_automated));
+
+	if (OV_unlikely(country == nullptr)) {
+		Logger::error(
+			"GAME_ACTION_SET_GOOD_AUTOMATED called with invalid country index: ", std::get<0>(*country_good_automated)
+		);
+		return false;
+	}
+
+	GoodInstance const* good = good_instance_manager.get_good_instance_by_index(std::get<1>(*country_good_automated));
+
+	if (OV_unlikely(good == nullptr)) {
+		Logger::error("GAME_ACTION_SET_GOOD_AUTOMATED called with invalid good index: ", std::get<1>(*country_good_automated));
+		return false;
+	}
+
+	CountryInstance::good_data_t& good_data = country->get_good_data(*good);
+
+	const bool old_automated = good_data.is_automated;
+
+	good_data.is_automated = std::get<2>(*country_good_automated);
+
+	return old_automated != good_data.is_automated;
+}
 
 // Diplomacy
 
 // Military
-bool InstanceManager::game_action_callback_create_general(game_action_argument_t const& argument) {
-	return false;
-}
+bool InstanceManager::game_action_callback_create_leader(game_action_argument_t const& argument) {
+	std::pair<uint64_t, bool> const* country_branch = std::get_if<std::pair<uint64_t, bool>>(&argument);
+	if (OV_unlikely(country_branch == nullptr)) {
+		Logger::error("GAME_ACTION_CREATE_LEADER called with invalid argument: ", argument);
+		return false;
+	}
 
-bool InstanceManager::game_action_callback_create_admiral(game_action_argument_t const& argument) {
-	return false;
+	CountryInstance* country = country_instance_manager.get_country_instance_by_index(country_branch->first);
+
+	if (OV_unlikely(country == nullptr)) {
+		Logger::error("GAME_ACTION_CREATE_LEADER called with invalid country index: ", country_branch->first);
+		return false;
+	}
+
+	if (country->get_create_leader_count() < 1) {
+		Logger::error(
+			"GAME_ACTION_CREATE_LEADER called for country \"", country->get_identifier(),
+			"\" without enough leadership points (", country->get_leadership_point_stockpile().to_string(2),
+			") to create any leaders!"
+		);
+		return false;
+	}
+
+	return unit_instance_manager.create_leader(
+		*country,
+		country_branch->second ? UnitType::branch_t::LAND : UnitType::branch_t::NAVAL,
+		today
+	);
 }
 
 bool InstanceManager::game_action_callback_set_use_leader(game_action_argument_t const& argument) {
-	return false;
+	std::pair<uint64_t, bool> const* leader_use = std::get_if<std::pair<uint64_t, bool>>(&argument);
+	if (OV_unlikely(leader_use == nullptr)) {
+		Logger::error("GAME_ACTION_SET_USE_LEADER called with invalid argument: ", argument);
+		return false;
+	}
+
+	LeaderInstance* leader = unit_instance_manager.get_leader_instance_by_unique_id(leader_use->first);
+
+	if (OV_unlikely(leader == nullptr)) {
+		Logger::error("GAME_ACTION_SET_USE_LEADER called with invalid leader index: ", leader_use->first);
+		return false;
+	}
+
+	const bool old_use = leader->get_can_be_used();
+
+	leader->set_can_be_used(leader_use->second);
+
+	return old_use != leader->get_can_be_used();
 }
 
 bool InstanceManager::game_action_callback_set_auto_create_leaders(game_action_argument_t const& argument) {
@@ -779,5 +855,22 @@ bool InstanceManager::game_action_callback_set_auto_assign_leaders(game_action_a
 }
 
 bool InstanceManager::game_action_callback_set_mobilise(game_action_argument_t const& argument) {
-	return false;
+	std::pair<uint64_t, bool> const* country_mobilise = std::get_if<std::pair<uint64_t, bool>>(&argument);
+	if (OV_unlikely(country_mobilise == nullptr)) {
+		Logger::error("GAME_ACTION_SET_MOBILISE called with invalid argument: ", argument);
+		return false;
+	}
+
+	CountryInstance* country = country_instance_manager.get_country_instance_by_index(country_mobilise->first);
+
+	if (OV_unlikely(country == nullptr)) {
+		Logger::error("GAME_ACTION_SET_MOBILISE called with invalid country index: ", country_mobilise->first);
+		return false;
+	}
+
+	const bool old_mobilise = country->is_mobilised();
+
+	country->set_mobilised(country_mobilise->second);
+
+	return old_mobilise != country->is_mobilised();
 }

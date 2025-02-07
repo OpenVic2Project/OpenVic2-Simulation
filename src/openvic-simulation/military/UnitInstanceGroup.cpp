@@ -3,9 +3,11 @@
 #include <vector>
 
 #include "openvic-simulation/country/CountryInstance.hpp"
+#include "openvic-simulation/defines/MilitaryDefines.hpp"
 #include "openvic-simulation/map/MapInstance.hpp"
 #include "openvic-simulation/map/ProvinceInstance.hpp"
 #include "openvic-simulation/military/Deployment.hpp"
+#include "openvic-simulation/military/LeaderTrait.hpp"
 
 using namespace OpenVic;
 
@@ -335,13 +337,11 @@ bool UnitInstanceManager::generate_unit_instance_group(
 	return ret;
 }
 
-bool UnitInstanceManager::generate_leader(
-	CultureManager const& culture_manager, CountryInstance& country, LeaderBase const& leader
-) {
+void UnitInstanceManager::generate_leader(CountryInstance& country, LeaderBase const& leader) {
 	LeaderInstance& leader_instance = *leaders.insert({
 		unique_id_counter++, leader
 	});
-	leader_map.emplace(leader_instance.get_unique_id(), &leader_instance);
+	leader_instance_map.emplace(leader_instance.get_unique_id(), &leader_instance);
 
 	if (leader_instance.get_picture().empty() && country.get_primary_culture() != nullptr) {
 		leader_instance.set_picture(culture_manager.get_leader_picture_name(
@@ -350,12 +350,18 @@ bool UnitInstanceManager::generate_leader(
 	}
 
 	country.add_leader(leader_instance);
-
-	return true;
 }
 
+UnitInstanceManager::UnitInstanceManager(
+	CultureManager const& new_culture_manager,
+	LeaderTraitManager const& new_leader_trait_manager,
+	MilitaryDefines const& new_military_defines
+) : culture_manager { new_culture_manager },
+	leader_trait_manager { new_leader_trait_manager },
+	military_defines { new_military_defines } {}
+
 bool UnitInstanceManager::generate_deployment(
-	CultureManager const& culture_manager, MapInstance& map_instance, CountryInstance& country, Deployment const* deployment
+	MapInstance& map_instance, CountryInstance& country, Deployment const* deployment
 ) {
 	if (deployment == nullptr) {
 		Logger::error("Trying to generate null deployment for ", country.get_identifier());
@@ -365,7 +371,7 @@ bool UnitInstanceManager::generate_deployment(
 	bool ret = true;
 
 	for (LeaderBase const& leader : deployment->get_leaders()) {
-		ret &= generate_leader(culture_manager, country, leader);
+		generate_leader(country, leader);
 	}
 
 	const auto generate_group = [this, &map_instance, &country, &ret, deployment]<UnitType::branch_t Branch>() -> void {
@@ -396,4 +402,119 @@ void UnitInstanceManager::tick() {
 	for (NavyInstance& navy : navies) {
 		navy.tick();
 	}
+}
+
+LeaderInstance* UnitInstanceManager::get_leader_instance_by_unique_id(unique_id_t unique_id) {
+	const decltype(leader_instance_map)::const_iterator it = leader_instance_map.find(unique_id);
+
+	if (it != leader_instance_map.end()) {
+		return it->second;
+	} else {
+		return nullptr;
+	}
+}
+
+UnitInstance* UnitInstanceManager::get_unit_instance_by_unique_id(unique_id_t unique_id) {
+	const decltype(unit_instance_map)::const_iterator it = unit_instance_map.find(unique_id);
+
+	if (it != unit_instance_map.end()) {
+		return it->second;
+	} else {
+		return nullptr;
+	}
+}
+
+UnitInstanceGroup* UnitInstanceManager::get_unit_instance_group_by_unique_id(unique_id_t unique_id) {
+	const decltype(unit_instance_group_map)::const_iterator it = unit_instance_group_map.find(unique_id);
+
+	if (it != unit_instance_group_map.end()) {
+		return it->second;
+	} else {
+		return nullptr;
+	}
+}
+
+bool UnitInstanceManager::create_leader(
+	CountryInstance& country,
+	UnitType::branch_t branch,
+	Date creation_date,
+	std::string_view name,
+	LeaderTrait const* personality,
+	LeaderTrait const* background
+) {
+	Logger::info("CREATING LEADER");
+
+	const fixed_point_t leader_creation_cost = military_defines.get_leader_recruit_cost();
+	if (country.get_leadership_point_stockpile() < leader_creation_cost) {
+		Logger::error(
+			"Country \"", country.get_identifier(), "\" does not have enough leadership points (",
+			country.get_leadership_point_stockpile().to_string(2), ") to create a ",
+			UnitType::get_branched_leader_name(branch), " (cost: ", leader_creation_cost.to_string(2), ")"
+		);
+		return false;
+	}
+
+	// TODO - replace with RNG
+	static size_t item_selection_counter = 0;
+
+	// Variable for storing a generated name if none is provided
+	std::string name_storage;
+	if (name.empty()) {
+		Culture const* culture = country.get_primary_culture();
+
+		if (culture != nullptr) {
+			std::string_view first_name, connector, last_name;
+
+			if (!culture->get_first_names().empty()) {
+				first_name = culture->get_first_names()[item_selection_counter++ % culture->get_first_names().size()];
+			}
+
+			if (!culture->get_last_names().empty()) {
+				last_name = culture->get_last_names()[item_selection_counter++ % culture->get_last_names().size()];
+			}
+
+			if (!first_name.empty() && !last_name.empty()) {
+				connector = " ";
+			}
+
+			name_storage = StringUtils::append_string_views(first_name, connector, last_name);
+			name = name_storage;
+		}
+	}
+	Logger::info("NAME: ", name);
+
+	if (personality == nullptr && !leader_trait_manager.get_personality_traits().empty()) {
+		personality = leader_trait_manager.get_personality_traits()[
+			item_selection_counter++ % leader_trait_manager.get_personality_traits().size()
+		];
+	}
+	Logger::info("PERSONALITY: ", personality);
+
+	if (background == nullptr && !leader_trait_manager.get_background_traits().empty()) {
+		background = leader_trait_manager.get_background_traits()[
+			item_selection_counter++ % leader_trait_manager.get_background_traits().size()
+		];
+	}
+	Logger::info("BACKGROUND: ", background);
+
+	Logger::info("DATA SETUP FINISHED");
+
+	// TODO - should we abort is personality or background is still nullptr?
+	// Or even if name is empty? Should we add a default name or is empty fine?
+
+	generate_leader(country, {
+		name,
+		branch,
+		creation_date,
+		personality,
+		background,
+		fixed_point_t::_0(), // 0 starting prestige
+		{} // No picture, will be set up by generate_leader
+	});
+
+	Logger::info("LEADER GENERATED");
+
+	country.set_leadership_point_stockpile(country.get_leadership_point_stockpile() - leader_creation_cost);
+
+	return true;
 }

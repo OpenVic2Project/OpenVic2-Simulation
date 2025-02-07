@@ -242,7 +242,7 @@ namespace OpenVic {
 		size_t PROPERTY(ship_count, 0);
 		fixed_point_t PROPERTY(total_consumed_ship_supply);
 		fixed_point_t PROPERTY(max_ship_supply);
-		fixed_point_t PROPERTY(leadership_point_stockpile);
+		fixed_point_t PROPERTY_RW(leadership_point_stockpile, 100); // TODO - remove test leadership point starting stockpile
 		fixed_point_t PROPERTY(monthly_leadership_points);
 		fixed_point_map_t<PopType const*> PROPERTY(leadership_points_from_pop_types);
 		int32_t PROPERTY(create_leader_count, 0);
@@ -251,7 +251,7 @@ namespace OpenVic {
 		// clamps the result in the range [0, war_exhaustion_max] straight away, matching the base game's behaviour.
 		fixed_point_t PROPERTY(war_exhaustion);
 		fixed_point_t PROPERTY(war_exhaustion_max);
-		bool PROPERTY_CUSTOM_PREFIX(mobilised, is, false);
+		bool PROPERTY_RW_CUSTOM_NAME(mobilised, is_mobilised, set_mobilised, false);
 		bool PROPERTY_CUSTOM_PREFIX(disarmed, is, false);
 		bool PROPERTY_RW(auto_create_leaders, true);
 		bool PROPERTY_RW(auto_assign_leaders, true);
@@ -518,9 +518,15 @@ namespace OpenVic {
 
 		void update_gamestate(InstanceManager& instance_manager);
 		void tick(InstanceManager& instance_manager);
+
 		void report_artisan_output(ProductionType const& production_type, const fixed_point_t quantity);
 		void report_factory_output(ProductionType const& production_type, const fixed_point_t quantity);
 		void report_rgo_output(GoodDefinition const& good, const fixed_point_t quantity);
+
+		good_data_t& get_good_data(GoodInstance const& good_instance);
+		good_data_t const& get_good_data(GoodInstance const& good_instance) const;
+		good_data_t& get_good_data(GoodDefinition const& good_definition);
+		good_data_t const& get_good_data(GoodDefinition const& good_definition) const;
 	};
 
 	struct CountryDefinitionManager;

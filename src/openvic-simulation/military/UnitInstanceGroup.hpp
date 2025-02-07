@@ -156,16 +156,24 @@ namespace OpenVic {
 	struct MapInstance;
 	struct Deployment;
 	struct CultureManager;
+	struct LeaderTraitManager;
+	struct MilitaryDefines;
 
 	struct UnitInstanceManager {
 	private:
+		// Used for leader pictures and names
+		CultureManager const& culture_manager;
+		LeaderTraitManager const& leader_trait_manager;
+		MilitaryDefines const& military_defines;
+
 		// TODO - use single counter or separate for leaders vs units vs unit groups? (even separate for branches?)
-		unique_id_t unique_id_counter = 0;
+		// Starts at 1, so ID 0 represents an invalid value
+		unique_id_t unique_id_counter = 1;
 
 		// TODO - maps from unique_ids to leader/unit/unit group pointers (one big map or multiple maps?)
 
 		plf::colony<LeaderInstance> PROPERTY(leaders);
-		ordered_map<unique_id_t, LeaderInstance*> PROPERTY(leader_map);
+		ordered_map<unique_id_t, LeaderInstance*> PROPERTY(leader_instance_map);
 
 		plf::colony<RegimentInstance> PROPERTY(regiments);
 		plf::colony<ShipInstance> PROPERTY(ships);
@@ -185,15 +193,35 @@ namespace OpenVic {
 		bool generate_unit_instance_group(
 			MapInstance& map_instance, CountryInstance& country, UnitDeploymentGroup<Branch> const& unit_deployment_group
 		);
-		bool generate_leader(CultureManager const& culture_manager, CountryInstance& country, LeaderBase const& leader);
+		void generate_leader(CountryInstance& country, LeaderBase const& leader);
 
 	public:
-		bool generate_deployment(
-			CultureManager const& culture_manager, MapInstance& map_instance, CountryInstance& country,
-			Deployment const* deployment
+		UnitInstanceManager(
+			CultureManager const& new_culture_manager,
+			LeaderTraitManager const& new_leader_trait_manager,
+			MilitaryDefines const& new_military_defines
 		);
+
+		bool generate_deployment(MapInstance& map_instance, CountryInstance& country, Deployment const* deployment);
 
 		void update_gamestate();
 		void tick();
+
+		LeaderInstance* get_leader_instance_by_unique_id(unique_id_t unique_id);
+		UnitInstance* get_unit_instance_by_unique_id(unique_id_t unique_id);
+		UnitInstanceGroup* get_unit_instance_group_by_unique_id(unique_id_t unique_id);
+
+		// Creates a new leader of the specified branch and adds it to the specified country. The leader's name and traits
+		// can be specified, but if they are not, the leader will be generated with a random name and traits. The country's
+		// leadership points will be checked and, if there are enough, have the leader creation cost subtracted from them.
+		// If the country does not have enough leadership points, the function will return false and no leader will be created.
+		bool create_leader(
+			CountryInstance& country,
+			UnitType::branch_t branch,
+			Date creation_date,
+			std::string_view name = {},
+			LeaderTrait const* personality = nullptr,
+			LeaderTrait const* background = nullptr
+		);
 	};
 }

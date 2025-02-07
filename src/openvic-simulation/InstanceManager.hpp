@@ -51,12 +51,14 @@ namespace OpenVic {
 		// Population
 
 		// Trade
+		GAME_ACTION_SET_GOOD_AUTOMATED,
+		// GAME_ACTION_SET_GOOD_BUY_SELL,
+		// GAME_ACTION_SET_GOOD_STOCKPILE_CUTOFF,
 
 		// Diplomacy
 
 		// Military
-		GAME_ACTION_CREATE_GENERAL,
-		GAME_ACTION_CREATE_ADMIRAL,
+		GAME_ACTION_CREATE_LEADER,
 		GAME_ACTION_SET_USE_LEADER,
 		GAME_ACTION_SET_AUTO_CREATE_LEADERS,
 		GAME_ACTION_SET_AUTO_ASSIGN_LEADERS,
@@ -68,7 +70,7 @@ namespace OpenVic {
 
 	using game_action_argument_t = std::variant<
 		std::monostate, Date, bool, int64_t, std::pair<uint64_t, bool>, std::pair<uint64_t, uint64_t>,
-		std::pair<uint64_t, int64_t>, std::tuple<uint64_t, uint64_t, int64_t>
+		std::pair<uint64_t, int64_t>, std::tuple<uint64_t, uint64_t, int64_t>, std::tuple<uint64_t, uint64_t, bool>
 	>;
 
 	// TODO - prevent this from catching anything that can be used to construct an argument
@@ -182,12 +184,12 @@ namespace OpenVic {
 		// Population
 
 		// Trade
+		bool game_action_callback_set_good_automated(game_action_argument_t const& argument);
 
 		// Diplomacy
 
 		// Military
-		bool game_action_callback_create_general(game_action_argument_t const& argument);
-		bool game_action_callback_create_admiral(game_action_argument_t const& argument);
+		bool game_action_callback_create_leader(game_action_argument_t const& argument);
 		bool game_action_callback_set_use_leader(game_action_argument_t const& argument);
 		bool game_action_callback_set_auto_create_leaders(game_action_argument_t const& argument);
 		bool game_action_callback_set_auto_assign_leaders(game_action_argument_t const& argument);
