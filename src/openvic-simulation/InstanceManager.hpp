@@ -1,6 +1,10 @@
 #pragma once
 
+#include <array>
+#include <cstdint>
 #include <functional>
+#include <ostream>
+#include <variant>
 
 #include "openvic-simulation/console/ConsoleInstance.hpp"
 #include "openvic-simulation/country/CountryInstance.hpp"
@@ -16,6 +20,66 @@
 #include "openvic-simulation/types/FlagStrings.hpp"
 
 namespace OpenVic {
+	enum struct game_action_type_t : uint64_t {
+		GAME_ACTION_NONE,
+
+		// Core
+		GAME_ACTION_TICK,
+		GAME_ACTION_SET_PAUSE,
+		GAME_ACTION_SET_SPEED,
+		GAME_ACTION_SET_AI,
+
+		// Production
+		GAME_ACTION_EXPAND_PROVINCE_BUILDING,
+
+		// Budget
+		GAME_ACTION_SET_STRATA_TAX,
+		GAME_ACTION_SET_LAND_SPENDING,
+		GAME_ACTION_SET_NAVAL_SPENDING,
+		GAME_ACTION_SET_CONSTRUCTION_SPENDING,
+		GAME_ACTION_SET_EDUCATION_SPENDING,
+		GAME_ACTION_SET_ADMINISTRATION_SPENDING,
+		GAME_ACTION_SET_SOCIAL_SPENDING,
+		GAME_ACTION_SET_MILITARY_SPENDING,
+		GAME_ACTION_SET_TARIFF_RATE,
+
+		// Technology
+		GAME_ACTION_START_RESEARCH,
+
+		// Politics
+
+		// Population
+
+		// Trade
+		GAME_ACTION_SET_GOOD_AUTOMATED,
+		// GAME_ACTION_SET_GOOD_BUY_SELL,
+		// GAME_ACTION_SET_GOOD_STOCKPILE_CUTOFF,
+
+		// Diplomacy
+
+		// Military
+		GAME_ACTION_CREATE_LEADER,
+		GAME_ACTION_SET_USE_LEADER,
+		GAME_ACTION_SET_AUTO_CREATE_LEADERS,
+		GAME_ACTION_SET_AUTO_ASSIGN_LEADERS,
+		GAME_ACTION_SET_MOBILISE,
+		// rally point settings?
+
+		MAX_GAME_ACTION
+	};
+
+	using game_action_argument_t = std::variant<
+		std::monostate, Date, bool, int64_t, std::pair<uint64_t, bool>, std::pair<uint64_t, uint64_t>,
+		std::pair<uint64_t, int64_t>, std::tuple<uint64_t, uint64_t, int64_t>, std::tuple<uint64_t, uint64_t, bool>
+	>;
+
+	// TODO - prevent this from catching anything that can be used to construct an argument
+	// (currently causes this warning: 'argument': conversion from 'size_t' to 'OpenVic::Date::year_t', possible loss of data)
+
+	std::ostream& operator<<(std::ostream& stream, game_action_argument_t const& argument);
+
+	using game_action_t = std::pair<game_action_type_t, game_action_argument_t>;
+
 	struct DefinitionManager;
 	struct Bookmark;
 
@@ -49,19 +113,21 @@ namespace OpenVic {
 		Bookmark const* PROPERTY(bookmark, nullptr);
 		Date PROPERTY(today);
 		gamestate_updated_func_t gamestate_updated;
-		bool gamestate_needs_update = false, currently_updating_gamestate = false;
+		std::vector<game_action_t> game_action_queue;
+		bool gamestate_needs_update = false, currently_updating_gamestate = false, currently_executing_game_actions = false;
 
 		void update_modifier_sums();
 		void set_gamestate_needs_update();
 		void update_gamestate();
-		void tick();
+		void tick(Date new_today);
+
+		void execute_game_actions();
 
 	public:
 		InstanceManager(
 			GameRulesManager const& new_game_rules_manager,
 			DefinitionManager const& new_definition_manager,
-			gamestate_updated_func_t gamestate_updated_callback,
-			SimulationClock::state_changed_function_t clock_state_changed_callback
+			gamestate_updated_func_t gamestate_updated_callback
 		);
 
 		inline constexpr bool is_bookmark_loaded() const {
@@ -73,8 +139,60 @@ namespace OpenVic {
 		bool start_game_session();
 		bool update_clock();
 
+		// TODO - maybe do this as a game action?
 		bool set_today_and_update(Date new_today);
 
-		bool expand_selected_province_building(size_t building_index);
+		bool queue_game_action(game_action_type_t type, game_action_argument_t&& argument);
+
+	private:
+		// Return value indicates whether a gamestate update is needed or not
+		using game_action_callback_t = bool(InstanceManager::*)(game_action_argument_t const&);
+
+		static std::array<
+			game_action_callback_t, static_cast<size_t>(game_action_type_t::MAX_GAME_ACTION)
+		> GAME_ACTION_CALLBACKS;
+
+		bool execute_game_action(game_action_t const& game_action);
+
+		bool game_action_callback_none(game_action_argument_t const& argument);
+
+		// Core
+		bool game_action_callback_tick(game_action_argument_t const& argument);
+		bool game_action_callback_set_pause(game_action_argument_t const& argument);
+		bool game_action_callback_set_speed(game_action_argument_t const& argument);
+		bool game_action_callback_set_ai(game_action_argument_t const& argument);
+
+		// Production
+		bool game_action_callback_expand_province_building(game_action_argument_t const& argument);
+
+		// Budget
+		bool game_action_callback_set_strata_tax(game_action_argument_t const& argument);
+		bool game_action_callback_set_land_spending(game_action_argument_t const& argument);
+		bool game_action_callback_set_naval_spending(game_action_argument_t const& argument);
+		bool game_action_callback_set_construction_spending(game_action_argument_t const& argument);
+		bool game_action_callback_set_education_spending(game_action_argument_t const& argument);
+		bool game_action_callback_set_administration_spending(game_action_argument_t const& argument);
+		bool game_action_callback_set_social_spending(game_action_argument_t const& argument);
+		bool game_action_callback_set_military_spending(game_action_argument_t const& argument);
+		bool game_action_callback_set_tariff_rate(game_action_argument_t const& argument);
+
+		// Technology
+		bool game_action_callback_start_research(game_action_argument_t const& argument);
+
+		// Politics
+
+		// Population
+
+		// Trade
+		bool game_action_callback_set_good_automated(game_action_argument_t const& argument);
+
+		// Diplomacy
+
+		// Military
+		bool game_action_callback_create_leader(game_action_argument_t const& argument);
+		bool game_action_callback_set_use_leader(game_action_argument_t const& argument);
+		bool game_action_callback_set_auto_create_leaders(game_action_argument_t const& argument);
+		bool game_action_callback_set_auto_assign_leaders(game_action_argument_t const& argument);
+		bool game_action_callback_set_mobilise(game_action_argument_t const& argument);
 	};
 }

@@ -53,6 +53,12 @@ namespace OpenVic {
 	public:
 		GoodInstance(GoodInstance&&) = default;
 
+		// Is the good available for trading? (e.g. should be shown in trade menu)
+		// is_tradeable has no effect on this, only is_money and availability
+		constexpr bool is_trading_good() const {
+			return is_available && !good_definition.get_is_money();
+		}
+
 		//thread safe
 		void add_buy_up_to_order(GoodBuyUpToOrder&& buy_up_to_order);
 		void add_market_sell_order(GoodMarketSellOrder&& market_sell_order);
