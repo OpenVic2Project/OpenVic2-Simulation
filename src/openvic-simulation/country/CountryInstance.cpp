@@ -669,7 +669,15 @@ bool CountryInstance::modify_invention_unlock(
 		return false;
 	}
 
+	const bool invention_was_unlocked = unlock_level > 0;
 	unlock_level += unlock_level_change;
+	if (invention_was_unlocked != (unlock_level > 0)) {
+		if (invention_was_unlocked) {
+			inventions_count--;
+		} else {
+			inventions_count++;
+		}
+	}
 
 	bool ret = true;
 

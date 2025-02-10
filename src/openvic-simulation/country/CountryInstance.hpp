@@ -134,6 +134,7 @@ namespace OpenVic {
 		/* Technology */
 		IndexedMap<Technology, unlock_level_t> PROPERTY(technology_unlock_levels);
 		IndexedMap<Invention, unlock_level_t> PROPERTY(invention_unlock_levels);
+		int32_t PROPERTY(inventions_count);
 		Technology const* PROPERTY(current_research, nullptr);
 		fixed_point_t PROPERTY(invested_research_points);
 		fixed_point_t PROPERTY(current_research_cost);
