@@ -206,4 +206,71 @@ namespace std {
 
 namespace OpenVic {
 	using atomic_fixed_point_t = std::atomic<fixed_point_t>;
+
+	struct moveable_atomic_fixed_point_t {
+	private:
+		atomic_fixed_point_t value;
+
+	public:
+		moveable_atomic_fixed_point_t() = default;
+		moveable_atomic_fixed_point_t(const atomic_fixed_point_t new_value)
+			: value { new_value.load() } {}
+		
+		moveable_atomic_fixed_point_t(moveable_atomic_fixed_point_t&& other) {
+			value.store(other.value);
+		}
+
+		fixed_point_t get_copy_of_value() const {
+			return value;
+		}
+
+		fixed_point_t operator=(fixed_point_t const& rhs) noexcept {
+			return value = rhs;
+		}
+		fixed_point_t operator=(fixed_point_t const& rhs) volatile noexcept {
+			return value = rhs;
+		}
+
+		fixed_point_t operator++(int) noexcept {
+			return value++;
+		}
+		fixed_point_t operator++(int) volatile noexcept {
+			return value++;
+		}
+
+		fixed_point_t operator--(int) noexcept {
+			return value--;
+		}
+		fixed_point_t operator--(int) volatile noexcept {
+			return value--;
+		}
+
+		fixed_point_t operator++() noexcept {
+			return ++value;
+		}
+		fixed_point_t operator++() volatile noexcept {
+			return ++value;
+		}
+
+		fixed_point_t operator--() noexcept {
+			return --value;
+		}
+		fixed_point_t operator--() volatile noexcept {
+			return --value;
+		}
+
+		fixed_point_t operator+=(fixed_point_t const& rhs) noexcept {
+			return value += rhs;
+		}
+		fixed_point_t operator+=(fixed_point_t const& rhs) volatile noexcept {
+			return value += rhs;
+		}
+
+		fixed_point_t operator-=(fixed_point_t const& rhs) noexcept {
+			return value -= rhs;
+		}
+		fixed_point_t operator-=(fixed_point_t const& rhs) volatile noexcept {
+			return value -= rhs;
+		}
+	};
 }
